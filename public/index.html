@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>D3-GraphBench Console</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = { darkMode: 'class' }
+    </script>
+</head>
+
+<body class="bg-gray-950 text-gray-100 font-sans h-screen flex overflow-hidden">
+
+    <!-- Sidebar: Case Management -->
+    <aside class="w-64 bg-gray-900 border-r border-gray-800 flex flex-col">
+        <div class="p-4 border-b border-gray-800">
+            <h1 class="text-xl font-bold text-blue-500">D3-GraphBench</h1>
+            <p class="text-xs text-gray-500 font-mono">v0.1.0-alpha</p>
+        </div>
+        <div class="p-4 border-b border-gray-800">
+            <label class="block text-sm font-medium text-gray-400 mb-2">Active Case ID</label>
+            <input type="text" id="caseIdInput" placeholder="e.g., PATIENT-77"
+                class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500 transition-colors">
+            <p class="text-xs text-gray-500 mt-2">All ingestion and queries will be isolated to this Case ID via Qdrant
+                Payload Filtering.</p>
+        </div>
+        <div class="flex-grow overflow-y-auto p-4">
+            <h3 class="text-sm font-bold text-gray-400 mb-2 uppercase tracking-wider">Recent Cases</h3>
+            <ul id="caseList" class="space-y-2">
+                <!-- Cases will be injected here -->
+            </ul>
+        </div>
+    </aside>
+
+    <!-- Main Content: Ingestion & Adjudication -->
+    <main class="flex-grow flex flex-col bg-gray-950 border-r border-gray-800 relative">
+        <div class="p-4 border-b border-gray-800 bg-gray-900">
+            <h2 class="text-lg font-semibold">Stage 1: Evidence Ingestion</h2>
+        </div>
+
+        <div class="p-6">
+            <!-- Upload Box -->
+            <div id="uploadZone"
+                class="border-2 border-dashed border-gray-700 rounded-lg p-8 text-center hover:border-blue-500 transition-colors bg-gray-900/50">
+                <input type="file" id="documentUpload" class="hidden">
+                <button onclick="document.getElementById('documentUpload').click()"
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition-colors">
+                    Select Medical Document
+                </button>
+                <p class="text-sm text-gray-500 mt-2">PNG, JPG, or PDF</p>
+            </div>
+
+            <!-- Action Button -->
+            <button id="processBtn" onclick="processDocument()"
+                class="w-full mt-4 bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-3 px-4 rounded border border-gray-700 transition-colors hidden">
+                Execute GraphRAG Pipeline
+            </button>
+
+            <!-- Loading State -->
+            <div id="loadingState" class="mt-6 hidden">
+                <div class="flex items-center space-x-3 text-blue-400 font-mono text-sm">
+                    <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none"
+                        viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                        </circle>
+                        <path class="opacity-75" fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                        </path>
+                    </svg>
+                    <span id="loadingText">Extracting OCR...</span>
+                </div>
+            </div>
+
+            <!-- Report Output -->
+            <div id="reportContainer" class="mt-6 hidden">
+                <h3 class="text-md font-bold mb-2 text-green-400">Deterministic Adjudication Report</h3>
+                <pre id="reportOutput"
+                    class="bg-gray-900 p-4 rounded border border-gray-800 text-sm font-mono overflow-auto h-96 text-gray-300 whitespace-pre-wrap"></pre>
+            </div>
+        </div>
+    </main>
+
+    <!-- Side Panel: Interactive Interrogation (Chat) -->
+    <aside class="w-96 bg-gray-900 flex flex-col relative">
+        <div class="p-4 border-b border-gray-800">
+            <h2 class="text-lg font-semibold">Stage 2: Context Interrogation</h2>
+        </div>
+
+        <!-- Chat History -->
+        <div id="chatHistory" class="flex-grow p-4 overflow-y-auto space-y-4">
+            <div class="text-xs text-gray-500 text-center font-mono">System armed. Awaiting case context.</div>
+        </div>
+
+        <!-- Chat Input -->
+        <div class="p-4 border-t border-gray-800 bg-gray-950">
+            <div class="flex space-x-2">
+                <input type="text" id="chatInput" placeholder="Ask about this case..."
+                    class="flex-grow bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500 transition-colors"
+                    onkeypress="if(event.key === 'Enter') sendChatMessage()">
+                <button onclick="sendChatMessage()"
+                    class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-sm font-bold transition-colors">→</button>
+            </div>
+        </div>
+    </aside>
+
+    <script>
+        const fileInput = document.getElementById('documentUpload');
+        const processBtn = document.getElementById('processBtn');
+        let selectedFile = null;
+
+        // File Selection Logic
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                selectedFile = e.target.files[0];
+                document.getElementById('uploadZone').classList.add('border-blue-500', 'bg-blue-900/20');
+                processBtn.classList.remove('hidden');
+                processBtn.innerText = `Process ${selectedFile.name}`;
+            }
+        });
+
+        // Case Management Logic
+        async function loadCases() {
+            try {
+                const res = await fetch('/api/cases');
+                const cases = await res.json();
+                const list = document.getElementById('caseList');
+                list.innerHTML = '';
+                cases.forEach(c => {
+                    const li = document.createElement('li');
+                    li.className = "p-2 bg-gray-800 hover:bg-gray-700 rounded cursor-pointer transition-colors text-sm border border-gray-700 hover:border-blue-500";
+                    li.innerHTML = `
+                        <div class="font-bold text-gray-200">${c.case_id}</div>
+                        <div class="text-xs text-gray-500">${new Date(c.created_at).toLocaleString()}</div>
+                    `;
+                    li.onclick = () => loadCaseDetails(c.case_id);
+                    list.appendChild(li);
+                });
+            } catch (e) {
+                console.error("Failed to load cases", e);
+            }
+        }
+
+        async function loadCaseDetails(caseId) {
+            document.getElementById('caseIdInput').value = caseId;
+            try {
+                const res = await fetch(`/api/cases/${caseId}`);
+                if (!res.ok) throw new Error("Failed to load case");
+                const caseData = await res.json();
+                
+                document.getElementById('reportContainer').classList.remove('hidden');
+                document.getElementById('reportOutput').innerText = JSON.stringify(caseData.adjudication_report, null, 2);
+
+                document.getElementById('chatHistory').innerHTML = '<div class="text-xs text-gray-500 text-center font-mono">System armed. Awaiting case context.</div>';
+                appendChat('System', `Case ${caseId} loaded from database. You may now interrogate the context.`, 'system');
+
+            } catch (e) {
+                alert(e.message);
+            }
+        }
+
+        window.onload = loadCases;
+
+        // Stage 1: The Ingestion Pipeline
+        async function processDocument() {
+            const caseId = document.getElementById('caseIdInput').value.trim();
+            if (!caseId) {
+                alert("STRICT FAULT: Case ID is required to bind vector data.");
+                return;
+            }
+            if (!selectedFile) return;
+
+            // UI State update
+            processBtn.classList.add('hidden');
+            document.getElementById('loadingState').classList.remove('hidden');
+            document.getElementById('reportContainer').classList.add('hidden');
+
+            const formData = new FormData();
+            formData.append('case_id', caseId);
+            formData.append('document', selectedFile);
+
+            try {
+                // Mocking the progress steps visually for the boss
+                setTimeout(() => document.getElementById('loadingText').innerText = "Linking Entities via SQLite/Ollama...", 1500);
+                setTimeout(() => document.getElementById('loadingText').innerText = "Traversing BODHI Knowledge Graph...", 3000);
+                setTimeout(() => document.getElementById('loadingText').innerText = "Generating Groq JSON Report...", 4500);
+
+                const response = await fetch('/api/ingest', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const resultText = await response.text();
+
+                document.getElementById('loadingState').classList.add('hidden');
+                document.getElementById('reportContainer').classList.remove('hidden');
+
+                // Attempt to pretty-print if Groq returned clean JSON
+                try {
+                    const jsonObj = JSON.parse(resultText);
+                    document.getElementById('reportOutput').innerText = JSON.stringify(jsonObj, null, 2);
+                } catch (e) {
+                    document.getElementById('reportOutput').innerText = resultText;
+                }
+
+                // Refresh cases list
+                await loadCases();
+
+                // Append system message to chat
+                appendChat('System', `Case ${caseId} data vectorized and loaded into memory. You may now interrogate the context.`, 'system');
+
+            } catch (error) {
+                document.getElementById('loadingState').classList.add('hidden');
+                alert(`Pipeline Failure: ${error.message}`);
+            }
+        }
+
+        // Stage 2: The Chat Controller
+        async function sendChatMessage() {
+            const caseId = document.getElementById('caseIdInput').value.trim();
+            const inputField = document.getElementById('chatInput');
+            const message = inputField.value.trim();
+
+            if (!caseId) {
+                alert("You must define a Case ID before interrogating.");
+                return;
+            }
+            if (!message) return;
+
+            // Update UI
+            inputField.value = '';
+            appendChat('You', message, 'user');
+
+            // Show typing indicator
+            const typingId = 'typing-' + Date.now();
+            appendChat('D3-Agent', 'Analyzing vectors...', 'typing', typingId);
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ case_id: caseId, query: message })
+                });
+
+                const result = await response.text();
+
+                // Remove typing indicator and show result
+                document.getElementById(typingId).remove();
+                appendChat('D3-Agent', result, 'agent');
+
+            } catch (error) {
+                document.getElementById(typingId).remove();
+                appendChat('System Error', error.message, 'error');
+            }
+        }
+
+        // Chat UI Helper
+        function appendChat(sender, text, type, id = null) {
+            const history = document.getElementById('chatHistory');
+            const msgDiv = document.createElement('div');
+            if (id) msgDiv.id = id;
+
+            let colorClass = 'text-gray-300';
+            if (type === 'user') colorClass = 'text-blue-400';
+            if (type === 'system') colorClass = 'text-green-500 font-mono text-xs';
+            if (type === 'error') colorClass = 'text-red-500';
+            if (type === 'typing') colorClass = 'text-gray-500 italic text-xs animate-pulse';
+
+            msgDiv.innerHTML = `
+                <div class="text-xs font-bold text-gray-500 mb-1">${sender}</div>
+                <div class="bg-gray-800 rounded p-3 text-sm ${colorClass} leading-relaxed whitespace-pre-wrap">${text}</div>
+            `;
+            history.appendChild(msgDiv);
+            history.scrollTop = history.scrollHeight;
+        }
+    </script>
+</body>
+
+</html>
