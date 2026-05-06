@@ -1,0 +1,32 @@
+[package]
+name = "d3-graph-bench"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.0", features = ["full"] }
+axum = { version = "0.7", features = ["multipart", "macros"] }
+tower-http = { version = "0.5", features = ["cors", "trace", "fs"] } # Added 'fs' for static files
+strsim = "0.11"
+fastembed = "5"
+ort = { version = "=2.0.0-rc.12", features = ["tls-native"] }
+uuid = { version = "1.8", features = ["v4"] }
+
+# Serialization & HTTP
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+reqwest = { version = "0.12", features = ["json", "multipart"] }
+
+# Databases & State
+neo4rs = "0.8" # Neo4j Graph client
+qdrant-client = "1.7" # Vector DB client
+rusqlite = { version = "0.31", features = ["bundled"] } # Local SQLite FTS5
+tokio-postgres = "0.7"
+deadpool-postgres = "0.14"
+
+# Environment & Utilities
+dotenvy = "0.15"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+async-trait = "0.1.89"
+pdf-extract = "0.10.0"

@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  neo4j:
+    image: neo4j:5.18.0
+    container_name: d3-neo4j
+    ports:
+      - "7474:7474" # HTTP Browser
+      - "7687:7687" # Bolt port for Rust
+    environment:
+      - NEO4J_AUTH=neo4j/graphbench2026
+      - NEO4J_PLUGINS=["n10s"]
+      - NEO4J_dbms_memory_heap_initial__size=512m
+      - NEO4J_dbms_memory_heap_max__size=2G
+      - NEO4J_dbms_memory_pagecache_size=512m
+    volumes:
+      - neo4j_data:/data
+      - ./data:/var/lib/neo4j/import
+    deploy:
+      resources:
+        limits:
+          memory: 2.5G
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: d3-qdrant
+    ports:
+      - "6333:6333" # HTTP API
+      - "6334:6334" # gRPC for Rust client
+    volumes:
+      - qdrant_data:/qdrant/storage
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: d3-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=d3admin
+      - POSTGRES_PASSWORD=graphbench2026
+      - POSTGRES_DB=nrces_dict
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./data_scripts/init.sql:/docker-entrypoint-initdb.d/init.sql # Auto-run schema
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+volumes:
+  neo4j_data:
+  qdrant_data:
+  pg_data:
