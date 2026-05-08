@@ -1,7 +1,8 @@
 CREATE TABLE IF NOT EXISTS dictionary (
     concept_id VARCHAR(255) PRIMARY KEY,
     term_type VARCHAR(255) NOT NULL,
-    name VARCHAR(255) NOT NULL
+    name VARCHAR(255) NOT NULL,
+    generic_concept_id VARCHAR(255)
 );
 
 -- We use pg_trgm for fast case-insensitive LIKE matches

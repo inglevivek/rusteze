@@ -32,7 +32,7 @@ pub async fn process_chat(
         graph.clone(),
         pg_pool.clone(),
         &config.qdrant_url,
-        &query,
+        &case_context,
     )
     .await;
 

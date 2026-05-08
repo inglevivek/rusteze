@@ -27,7 +27,8 @@ pub async fn check_medical_necessity(
 ) -> Result<bool, Box<dyn Error>> {
     // The Blueprint Query: MATCH (d:Diagnosis {id: $diag_id})-[:INDICATED_FOR]->(m:Medication {id: $med_id}) RETURN m
     // We parameterize this to prevent Cypher injection attacks and improve query caching.
-    let cypher = "MATCH (d:Diagnosis {id: $diag_id})-[:INDICATED_FOR]->(m:Medication {id: $med_id}) RETURN m LIMIT 1";
+    let cypher = "MATCH (d:ClinicalEntity {id: $diag_id})-[r:CLINICAL_RELATION]->(m:ClinicalEntity {id: $med_id}) WHERE r.type = 'INDICATED_FOR' RETURN m LIMIT 1";
+    tracing::info!("[Neo4j] Executing query: {} with diag_id: {}, med_id: {}", cypher, diag_id, med_id);
 
     let mut result = graph
         .execute(
@@ -66,12 +67,12 @@ pub async fn fetch_entity_neighborhood(
     // This query pulls the 'Textbook Knowledge' for each entity.
     // It looks for any immediate neighbors (depth 1) of the extracted concepts.
     let q = "
-        MATCH (a)-[r]-(b)
-        WITH a, r, b, COALESCE(a.id, a.identifier) AS sid, COALESCE(b.id, b.identifier) AS tid
-        WHERE sid IN $ids OR tid IN $ids
-        RETURN sid AS source, COALESCE(r.type, type(r)) AS relation, tid AS target
+        MATCH (a:ClinicalEntity)-[r:CLINICAL_RELATION]-(b:ClinicalEntity)
+        WHERE a.id IN $ids OR b.id IN $ids
+        RETURN a.id AS source, r.type AS relation, b.id AS target
         LIMIT 50
     ";
+    tracing::info!("[Neo4j] Executing query: {} with ids: {:?}", q, concept_ids);
 
     let mut result = graph
         .execute(query(q).param("ids", concept_ids))
@@ -100,11 +101,11 @@ pub async fn fetch_deterministic_pathways(
     // This query is 'Hybrid-Aware': It resolves nodes from both the Bodhi triples (using .id)
     // and the Drug Code graph (using .identifier).
     let q = "
-        MATCH (a)-[r]->(b)
-        WITH a, r, b, COALESCE(a.id, a.identifier) AS sid, COALESCE(b.id, b.identifier) AS tid
-        WHERE sid IN $ids AND tid IN $ids
-        RETURN sid AS source, COALESCE(r.type, type(r)) AS relation, tid AS target
+        MATCH (a:ClinicalEntity)-[r:CLINICAL_RELATION]->(b:ClinicalEntity)
+        WHERE a.id IN $ids AND b.id IN $ids
+        RETURN a.id AS source, r.type AS relation, b.id AS target
     ";
+    tracing::info!("[Neo4j] Executing query: {} with ids: {:?}", q, concept_ids);
 
     let mut result = graph
         .execute(query(q).param("ids", concept_ids))

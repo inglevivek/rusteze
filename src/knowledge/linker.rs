@@ -19,12 +19,19 @@ pub async fn resolve_entities(
     for term in &raw_terms {
         let result = search_dictionary(pool, term).await.unwrap_or(None);
         if let Some(entity) = result {
-            // Resolve commercial -> chemical
-            let resolved_id = entity.generic_concept_id.clone().unwrap_or(entity.concept_id.clone());
-            tracing::info!("[Linker] Fast Hit: '{}' -> {} (type: {})", term, resolved_id, entity.term_type);
+            // Use the canonical name as the graph ID, falling back to concept_id
+            // if name is empty. Bodhi nodes use name-strings as their `.id` field.
+            let graph_id = {
+                let base = entity.generic_concept_id
+                    .as_deref()
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(&entity.name);
+                base.trim().to_lowercase()
+            };
+            tracing::info!("[Linker] Fast Hit: '{}' -> {} (type: {})", term, graph_id, entity.term_type);
             
             let mut resolved_entity = entity;
-            resolved_entity.concept_id = resolved_id;
+            resolved_entity.concept_id = graph_id;
             successful_entities.push(resolved_entity);
         } else {
             db_misses.push(term.clone());
@@ -61,25 +68,38 @@ pub async fn resolve_entities(
         let result = search_dictionary(pool, &normalized).await.unwrap_or(None);
         
         if let Some(entity) = result {
-            // Resolve commercial -> chemical
-            let resolved_id = entity.generic_concept_id.clone().unwrap_or(entity.concept_id.clone());
+            let graph_id = {
+                let base = entity.generic_concept_id
+                    .as_deref()
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(&entity.name);
+                base.trim().to_lowercase()
+            };
             tracing::info!(
                 "[Linker] Recovered: '{}' -> '{}' -> {} (type: {})",
                 original,
                 normalized,
-                resolved_id,
+                graph_id,
                 entity.term_type
             );
             
             let mut resolved_entity = entity;
-            resolved_entity.concept_id = resolved_id;
+            resolved_entity.concept_id = graph_id;
             successful_entities.push(resolved_entity);
         } else {
-            tracing::error!(
-                "[Linker] Hard Fail: Normalized entity '{}' (from '{}') does not exist in vocabulary.",
+            // Bodhi rescue: synthesize a ClinicalEntity using the normalized name directly
+            // as the concept_id so Neo4j can attempt a name-based .id match.
+            tracing::warn!(
+                "[Linker] Vocab miss for '{}' (from '{}'). Injecting as raw Bodhi id for graph rescue.",
                 normalized,
                 original
             );
+            successful_entities.push(crate::clients::postgres::ClinicalEntity {
+                concept_id: normalized.trim().to_string(),
+                term_type: "BODHI_RESCUE".to_string(),
+                name: normalized.trim().to_string(),
+                generic_concept_id: None,
+            });
         }
     }
 

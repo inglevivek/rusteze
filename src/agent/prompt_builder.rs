@@ -12,6 +12,7 @@ pub async fn build_grounded_context(
     qdrant_url: &str,
     input_text: &str,
 ) -> String {
+    tracing::info!("[PromptBuilder] Starting context build for input: \n---\n{}\n---", input_text);
     tracing::info!("[PromptBuilder] Extracting entities for grounding...");
     let extracted_json = main_llm
         .extract_entities(input_text)
@@ -31,6 +32,7 @@ pub async fn build_grounded_context(
     }
 
     if raw_terms.is_empty() {
+        tracing::debug!("[PromptBuilder] Raw NER Output: {:?}", extracted_json);
         tracing::warn!("[PromptBuilder] No entities found to ground.");
         return "No specific topological or semantic context found.".to_string();
     }
@@ -55,10 +57,16 @@ pub async fn build_grounded_context(
         let words: Vec<&str> = input_text.split(|c: char| !c.is_alphanumeric()).filter(|w| w.len() > 4).collect();
         for word in words.iter().take(50) {
             if let Ok(Some(entity)) = crate::clients::postgres::search_dictionary(&pg_pool, word).await {
-                let resolved_id = entity.generic_concept_id.clone().unwrap_or(entity.concept_id.clone());
-                if !concept_ids.contains(&resolved_id) {
-                    concept_ids.push(resolved_id.clone());
-                    id_to_name.insert(resolved_id.clone(), entity.name.clone());
+                let graph_id = {
+                    let base = entity.generic_concept_id
+                        .as_deref()
+                        .filter(|s| !s.is_empty())
+                        .unwrap_or(&entity.name);
+                    base.trim().to_lowercase()
+                };
+                if !concept_ids.contains(&graph_id) {
+                    concept_ids.push(graph_id.clone());
+                    id_to_name.insert(graph_id.clone(), entity.name.clone());
                     entity_names.push(entity.name.clone());
                 }
             }
