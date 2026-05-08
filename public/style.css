@@ -1,0 +1,188 @@
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: #374151;
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #4b5563;
+}
+
+/* Resize Handles */
+.resize-handle {
+    width: 4px;
+    background-color: transparent;
+    cursor: col-resize;
+    z-index: 10;
+    transition: background-color 0.2s;
+}
+.resize-handle:hover, .resize-handle.active {
+    background-color: #3b82f6; /* blue-500 */
+}
+
+/* Toggle Switch */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 36px;
+    height: 20px;
+}
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #374151;
+    transition: .4s;
+}
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 14px;
+    width: 14px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .4s;
+}
+input:checked + .slider {
+    background-color: #3b82f6;
+}
+input:focus + .slider {
+    box-shadow: 0 0 1px #3b82f6;
+}
+input:checked + .slider:before {
+    transform: translateX(16px);
+}
+.slider.round {
+    border-radius: 20px;
+}
+.slider.round:before {
+    border-radius: 50%;
+}
+
+/* Markdown Styles */
+.markdown-body {
+    color: #e5e7eb;
+    font-size: 0.875rem;
+    line-height: 1.6;
+}
+.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 {
+    color: #f3f4f6;
+    font-weight: 600;
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+}
+.markdown-body h1 { font-size: 1.5em; }
+.markdown-body h2 { font-size: 1.25em; border-bottom: 1px solid #374151; padding-bottom: 0.3em; }
+.markdown-body h3 { font-size: 1.1em; }
+.markdown-body p {
+    margin-top: 0;
+    margin-bottom: 1em;
+}
+.markdown-body ul {
+    list-style-type: disc;
+    padding-left: 1.5em;
+    margin-bottom: 1em;
+}
+.markdown-body ol {
+    list-style-type: decimal;
+    padding-left: 1.5em;
+    margin-bottom: 1em;
+}
+.markdown-body li {
+    margin-bottom: 0.25em;
+}
+.markdown-body a {
+    color: #60a5fa;
+    text-decoration: none;
+}
+.markdown-body a:hover {
+    text-decoration: underline;
+}
+.markdown-body code {
+    font-family: monospace;
+    background-color: #1f2937;
+    padding: 0.2em 0.4em;
+    border-radius: 3px;
+    font-size: 0.9em;
+}
+.markdown-body pre {
+    background-color: #111827;
+    padding: 1em;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin-bottom: 1em;
+    border: 1px solid #374151;
+    position: relative;
+}
+.markdown-body pre code {
+    background-color: transparent;
+    padding: 0;
+    font-size: 0.9em;
+}
+.markdown-body blockquote {
+    border-left: 4px solid #4b5563;
+    padding-left: 1em;
+    color: #9ca3af;
+    margin-left: 0;
+    margin-bottom: 1em;
+}
+.markdown-body table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 1em;
+}
+.markdown-body th, .markdown-body td {
+    border: 1px solid #374151;
+    padding: 0.5em;
+    text-align: left;
+}
+.markdown-body th {
+    background-color: #1f2937;
+}
+
+/* Copy Code Button */
+.copy-code-btn {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    background-color: #374151;
+    color: #e5e7eb;
+    border: none;
+    border-radius: 4px;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+.markdown-body pre:hover .copy-code-btn {
+    opacity: 1;
+}
+.copy-code-btn:hover {
+    background-color: #4b5563;
+}
+
+/* Chat Message Bubbles */
+.msg-bubble {
+    max-w-[85%];
+    animation: fadeIn 0.3s ease-out;
+}
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}

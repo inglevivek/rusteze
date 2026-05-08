@@ -80,7 +80,7 @@ pub async fn save_case(
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let client = pool.get().await?;
     let stmt = client
-        .prepare("INSERT INTO cases (case_id, document_text) VALUES ($1, $2) ON CONFLICT (case_id) DO NOTHING")
+        .prepare("INSERT INTO cases (case_id, document_text) VALUES ($1, $2) ON CONFLICT (case_id) DO UPDATE SET document_text = EXCLUDED.document_text")
         .await?;
     client.execute(&stmt, &[&case_id, &document_text]).await?;
     Ok(())
