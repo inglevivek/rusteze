@@ -14,14 +14,33 @@ impl AgentClient for OllamaClient {
     async fn extract_entities(&self, text: &str) -> Result<Value, Box<dyn Error + Send + Sync>> {
         let client = Client::new();
 
-        let system_msg = r#"You are a clinical Named Entity Recognition (NER) extractor.
-Your ONLY job is to find drug/medication names and clinical diagnosis names in the provided text.
-Return ONLY this exact JSON object, no markdown, no explanation:
-{"medications": ["drug_name_1", ...], "diagnoses": ["diagnosis_name_1", ...]}
-If none found, return: {"medications": [], "diagnoses": []}
-Do NOT return any other keys or schema."#;
+        let system_msg = r#"You are a strict clinical NER extractor. Output ONLY the JSON object below — no markdown fences, no commentary, no extra keys.
 
-        let user_msg = format!("Extract clinical entities from this text:\n\n{}", text);
+SCHEMA (fixed — never deviate):
+{"medications": ["<brand or generic drug name>", ...], "diagnoses": ["<diagnosis or condition>", ...]}
+
+RULES:
+1. medications = prescription drugs, antibiotics, antipyretics, supplements, IV fluids by drug name (e.g. "Cefotroy", "Neomol", "Tab.Pexime-200"). Brand names are valid.
+2. diagnoses = diseases, syndromes, clinical conditions, lab-confirmed findings (e.g. "Typhoid fever", "Anaemia", "Thrombocytopenia").
+3. DO NOT include: patient name, age, gender, hospital name, lab values, units, dates, phone numbers, doctor credentials, test names (Haemoglobin, WBC, MCV), or any other field.
+4. DO NOT output "testResults", "documentType", "patientName", or ANY key other than "medications" and "diagnoses".
+5. If a drug or diagnosis is repeated, include it only once.
+6. If nothing found, output: {"medications": [], "diagnoses": []}
+
+EXAMPLE INPUT (fragment): "Patient admitted with high grade fever. Given Inj.Cefotroy-SB, Tab.Neomol 500mg. Diagnosis: Typhoid fever with Thrombocytopenia."
+EXAMPLE OUTPUT: {"medications": ["Cefotroy-SB", "Neomol"], "diagnoses": ["Typhoid fever", "Thrombocytopenia"]}
+
+Now extract from the provided text."#;
+
+        // Truncate to 12000 chars to stay within qwen2.5:3b's reliable window
+        // and avoid the model summarising instead of extracting.
+        let truncated = if text.len() > 12000 { &text[..12000] } else { text };
+        let user_msg = format!(
+            "Extract ONLY medications and diagnoses from the clinical document below.\n\
+             Do NOT describe the document. Do NOT return testResults, patient info, or lab values.\n\
+             Output ONLY: {{\"medications\": [...], \"diagnoses\": [...]}}\n\n---\n{}",
+            truncated
+        );
 
         tracing::info!(
             "┌── [Ollama ▶ SEND] extract_entities ────────────────────────\n│  model: {}\n│  input_len: {} chars\n└────────────────────────────────────────────────────────────",

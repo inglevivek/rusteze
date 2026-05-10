@@ -218,6 +218,13 @@ pub async fn search_global_knowledge(
     let query_embedding = model.embed(vec![query.to_string()]).await
         .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e))?.pop().unwrap();
 
+    // Diagnostic: log how many points exist in the collection before searching
+    // This catches the "collection exists but is empty" case silently returning 0.
+    tracing::info!(
+        "[Qdrant] search_global_knowledge called — query='{}' limit={}",
+        query, limit
+    );
+
     let search_result = client
         .search_points(
             SearchPointsBuilder::new("bodhi_global_knowledge", query_embedding, limit)
@@ -225,9 +232,23 @@ pub async fn search_global_knowledge(
         )
         .await?;
 
+    let hits = &search_result.result;
+    tracing::info!(
+        "[Qdrant] search_global_knowledge raw hit count: {}",
+        hits.len()
+    );
+    if hits.is_empty() {
+        tracing::warn!(
+            "[Qdrant] ⚠️  bodhi_global_knowledge returned 0 hits for query='{}'. \
+             Verify: (1) collection exists, (2) collection has points, \
+             (3) embedding dimension matches the indexed vectors.",
+            query
+        );
+    }
+
     let mut context = String::new();
     let mut fact_count = 0usize;
-    for hit in search_result.result {
+    for hit in hits {
         if let Some(payload_val) = hit.payload.get("fact") {
             if let Some(Kind::StringValue(text)) = &payload_val.kind {
                 context.push_str("- ");
@@ -244,4 +265,24 @@ pub async fn search_global_knowledge(
     );
 
     Ok(context)
+}
+
+/// Returns the number of points currently indexed in a Qdrant collection.
+/// Call from a startup check or debug endpoint to verify bodhi_global_knowledge is populated.
+pub async fn count_collection_points(
+    qdrant_url: &str,
+    collection_name: &str,
+) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
+    let client = reqwest::Client::new();
+    let url = format!("{}/collections/{}", qdrant_url, collection_name);
+    let resp: serde_json::Value = client.get(&url).send().await?.json().await?;
+    let count = resp
+        .pointer("/result/points_count")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    tracing::info!(
+        "[Qdrant] collection='{}' has {} points indexed",
+        collection_name, count
+    );
+    Ok(count)
 }

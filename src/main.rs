@@ -76,6 +76,17 @@ async fn async_main() {
         model: "qwen2.5:3b".to_string(),
     });
 
+    // Verify bodhi_global_knowledge is populated at startup
+    match crate::clients::qdrant::count_collection_points(&cfg.qdrant_url, "bodhi_global_knowledge").await {
+        Ok(n) if n == 0 => tracing::error!(
+            "❌ [Startup] bodhi_global_knowledge collection has 0 points. \
+             Global knowledge grounding will return no results. \
+             Run the data ingestion script in data_scripts/ to populate it."
+        ),
+        Ok(n) => tracing::info!("✅ [Startup] bodhi_global_knowledge has {} points ready.", n),
+        Err(e) => tracing::error!("❌ [Startup] Could not reach Qdrant to check bodhi_global_knowledge: {}", e),
+    }
+
     let shared_state = Arc::new(AppState {
         config: cfg,
         graph: graph_pool,

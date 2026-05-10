@@ -4,6 +4,28 @@ use neo4rs::Graph;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+/// Extracts the first generic substance name from a dictionary entry name's parenthetical.
+/// e.g. "Cefotroy-SB Forte (ceftriaxone sodium and sulbactam sodium) 1g"
+///   → Some("ceftriaxone")
+/// e.g. "Neomol (paracetamol) 250 mg" → Some("paracetamol")
+fn extract_substance_from_name(name: &str) -> Option<String> {
+    let start = name.find('(')?;
+    let end = name.find(')')?;
+    if end <= start { return None; }
+    let inner = &name[start + 1..end];
+    // Take the first token before "and", "with", " ", or a number
+    let first_token = inner
+        .split(|c: char| c == ' ' || c == ',' || c == '/')
+        .next()
+        .unwrap_or("")
+        .trim();
+    if first_token.len() >= 4 {
+        Some(first_token.to_lowercase())
+    } else {
+        None
+    }
+}
+
 pub async fn build_grounded_context(
     ner_llm: Arc<dyn AgentClient>,
     slm: Arc<dyn AgentClient>,
@@ -119,6 +141,17 @@ pub async fn build_grounded_context(
             "MITCHATION","PATHOLOST","ACCORDINGLY",
         ];
 
+        /// Tokens that appear in clinical documents as LAB FIELD NAMES, not drug prescriptions.
+        /// If the sweep keyword matches any of these, the hit is a false positive.
+        const LAB_FIELD_TOKENS: &[&str] = &[
+            "KETONE", "KETONES", "GLUCOSE", "PROTEIN", "ALBUMIN", "BILIRUBIN",
+            "CREATININE", "UREA", "CHOLESTEROL", "TRIGLYCERIDE", "HEMOGLOBIN",
+            "HAEMOGLOBIN", "SODIUM", "POTASSIUM", "CALCIUM", "CHLORIDE", "PHOSPHATE",
+            "URIC", "IRON", "FERRITIN", "TSH", "T3", "T4", "HBA1C", "PSA",
+            "AMYLASE", "LIPASE", "ALT", "AST", "ALP", "GGT", "LDH",
+            "STABLE", "NORMAL", "POSITIVE", "NEGATIVE", "REACTIVE", "PRESENT", "ABSENT",
+        ];
+
         fn is_valid_sweep_term(term: &str) -> bool {
             let upper = term.to_uppercase();
             // Must be at least 6 chars
@@ -127,9 +160,10 @@ pub async fn build_grounded_context(
             if CLINICAL_STOPWORDS.contains(&upper.as_str()) { return false; }
             // Must start with a letter (no purely numeric terms)
             if !term.chars().next().map(|c| c.is_alphabetic()).unwrap_or(false) { return false; }
-            // Must not be all lowercase common English (heuristic: if all lowercase
-            // and less than 8 chars, skip — real brand names are usually ALL CAPS or TitleCase)
+            // Must not be all lowercase common English (heuristic)
             if term.chars().all(|c| c.is_lowercase()) && term.len() < 8 { return false; }
+            // Must not be a known lab field token
+            if LAB_FIELD_TOKENS.contains(&upper.as_str()) { return false; }
             true
         }
 
@@ -149,8 +183,26 @@ pub async fn build_grounded_context(
 
         let mut sweep_entities: Vec<crate::clients::postgres::ClinicalEntity> = Vec::new();
         for term in &candidate_terms {
-            // Use PREFIX-only matching (term% not %term%) to prevent substring pollution
             if let Ok(Some(entity)) = crate::clients::postgres::search_dictionary_prefix(&pg_pool, term).await {
+                // Post-match plausibility check:
+                // Reject if the matched drug name contains a dosage-form suffix that
+                // makes it clearly a lab reagent, shampoo, or non-systemic product
+                // that would never appear in a clinical prescription context.
+                let name_lower = entity.name.to_lowercase();
+                let is_implausible = name_lower.contains("shampoo")
+                    || name_lower.contains("reagent")
+                    || name_lower.contains("strip")
+                    || name_lower.contains("test kit")
+                    || name_lower.contains("diagnostic");
+
+                if is_implausible {
+                    tracing::warn!(
+                        "[PromptBuilder] Sweep hit REJECTED (implausible form): {:?} → '{}'",
+                        term, entity.name
+                    );
+                    continue;
+                }
+
                 tracing::info!(
                     "[PromptBuilder] Sweep hit: {:?} → name='{}' substance={:?}",
                     term, entity.name, entity.substance_name
@@ -164,13 +216,26 @@ pub async fn build_grounded_context(
             // Bridge sweep results to BODHI IDs
             let mut bridge_terms: Vec<String> = Vec::new();
             for entity in &sweep_entities {
+                // Primary: use DB substance_name field
                 if let Some(sub) = &entity.substance_name {
                     let base = sub.split_whitespace().next().unwrap_or(sub).to_string();
                     if base.len() >= 4 { bridge_terms.push(base); }
                 }
+                // Primary: use DB generic_name field
                 if let Some(gen) = &entity.generic_name {
                     let base = gen.split_whitespace().next().unwrap_or(gen).to_string();
                     if base.len() >= 4 { bridge_terms.push(base); }
+                }
+                // Fallback: parse substance from parenthetical in the drug name
+                // e.g. "Cefotroy-SB Forte (ceftriaxone sodium and sulbactam sodium)"
+                if entity.substance_name.is_none() && entity.generic_name.is_none() {
+                    if let Some(parsed) = extract_substance_from_name(&entity.name) {
+                        tracing::info!(
+                            "[PromptBuilder] Parenthetical fallback: '{}' → substance='{}'",
+                            entity.name, parsed
+                        );
+                        bridge_terms.push(parsed);
+                    }
                 }
                 id_to_name.insert(entity.concept_id.clone(), entity.name.clone());
                 entity_names.push(entity.name.clone());
