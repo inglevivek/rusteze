@@ -19,9 +19,15 @@ pub async fn recreate_collection(
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let client = Qdrant::from_url(qdrant_url).build()?;
 
+    tracing::info!(
+        "┌── [Qdrant ▶ SEND] recreate_collection ─────────────────────\n│  collection='{}' vector_size={}\n└────────────────────────────────────────────────────────────",
+        collection_name,
+        vector_size
+    );
+
     // Attempt DELETE collection -> ignore "not found" error
     if let Err(e) = client.delete_collection(collection_name).await {
-        tracing::warn!("Failed to delete collection {} (may not exist): {}", collection_name, e);
+        tracing::warn!("[Qdrant] Failed to delete collection {} (may not exist): {}", collection_name, e);
     }
 
     client
@@ -34,7 +40,11 @@ pub async fn recreate_collection(
         )
         .await?;
 
-    tracing::info!("[Qdrant] Recreated collection: {} with size {}", collection_name, vector_size);
+    tracing::info!(
+        "└── [Qdrant ◀ RECV] recreate_collection ─────────────────────\n│  ✅ collection='{}' created (dim={})\n└────────────────────────────────────────────────────────────",
+        collection_name,
+        vector_size
+    );
     Ok(())
 }
 
@@ -45,7 +55,13 @@ pub async fn init_and_embed(
     case_id: &str,
     vector_size: u64,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    tracing::info!("[Qdrant] Initializing Vector Store for Case: {}", case_id);
+    tracing::info!(
+        "┌── [Qdrant ▶ SEND] init_and_embed ──────────────────────────\n│  collection='{}' case_id='{}' text_len={} chars\n│  embed_url: {}\n└────────────────────────────────────────────────────────────",
+        COLLECTION_NAME,
+        case_id,
+        raw_text.len(),
+        embedding_url
+    );
 
     let client = Qdrant::from_url(qdrant_url).build()?;
 
@@ -72,11 +88,24 @@ pub async fn init_and_embed(
         .collect();
 
     if chunks.is_empty() {
+        tracing::warn!("[Qdrant] No chunks to embed for case_id='{}'", case_id);
         return Ok(());
     }
 
+    tracing::info!(
+        "┌── [Qdrant ▶ SEND] embed request ───────────────────────────\n│  Embedding {} chunks via {}\n└────────────────────────────────────────────────────────────",
+        chunks.len(),
+        embedding_url
+    );
+
     let embeddings = model.embed(chunks.clone()).await
         .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e))?;
+
+    tracing::info!(
+        "└── [Qdrant ◀ RECV] embed response ──────────────────────────\n│  ✅ {} embedding vectors returned (dim={})\n└────────────────────────────────────────────────────────────",
+        embeddings.len(),
+        embeddings.first().map(|v| v.len()).unwrap_or(0)
+    );
 
     let mut points = Vec::new();
     for (i, embedding) in embeddings.into_iter().enumerate() {
@@ -88,18 +117,24 @@ pub async fn init_and_embed(
         .unwrap()
         .clone();
 
-        // FIX 2: Explicitly define the HashMap type to resolve compiler ambiguity
         let payload_map: HashMap<String, serde_json::Value> = payload.into_iter().collect();
-
         let point = PointStruct::new(Uuid::new_v4().to_string(), embedding, payload_map);
         points.push(point);
     }
 
+    tracing::info!(
+        "┌── [Qdrant ▶ SEND] upsert_points ──────────────────────────\n│  Upserting {} points into '{}' for case_id='{}'\n└────────────────────────────────────────────────────────────",
+        points.len(),
+        COLLECTION_NAME,
+        case_id
+    );
+
     client
         .upsert_points(UpsertPointsBuilder::new(COLLECTION_NAME, points))
         .await?;
+
     tracing::info!(
-        "[Qdrant] Memorized {} vectors for Case: {}",
+        "└── [Qdrant ◀ RECV] upsert_points ──────────────────────────\n│  ✅ {} vectors memorized for case_id='{}'\n└────────────────────────────────────────────────────────────",
         chunks.len(),
         case_id
     );
@@ -114,8 +149,15 @@ pub async fn search_case_context(
     case_id: &str,
     limit: u64,
 ) -> Result<String, Box<dyn Error + Send + Sync>> {
-    let client = Qdrant::from_url(qdrant_url).build()?;
+    tracing::info!(
+        "┌── [Qdrant ▶ SEND] search_case_context ─────────────────────\n│  collection='{}' case_id='{}' limit={}\n│  query: {:?}\n└────────────────────────────────────────────────────────────",
+        COLLECTION_NAME,
+        case_id,
+        limit,
+        query
+    );
 
+    let client = Qdrant::from_url(qdrant_url).build()?;
     let model = BioLordEncoder::new(embedding_url);
 
     let query_embedding = model.embed(vec![query.to_string()]).await
@@ -138,23 +180,38 @@ pub async fn search_case_context(
         .await?;
 
     let mut context = String::new();
+    let mut hit_count = 0usize;
     for hit in search_result.result {
         if let Some(payload_val) = hit.payload.get("text") {
             if let Some(Kind::StringValue(text)) = &payload_val.kind {
                 context.push_str(text);
                 context.push_str("\n---\n");
+                hit_count += 1;
             }
         }
     }
 
+    tracing::info!(
+        "└── [Qdrant ◀ RECV] search_case_context ─────────────────────\n│  ✅ {} chunk(s) returned for case_id='{}'\n└────────────────────────────────────────────────────────────",
+        hit_count,
+        case_id
+    );
+
     Ok(context)
 }
+
 pub async fn search_global_knowledge(
     qdrant_url: &str,
     embedding_url: &str,
     query: &str,
     limit: u64,
 ) -> Result<String, Box<dyn Error + Send + Sync>> {
+    tracing::info!(
+        "┌── [Qdrant ▶ SEND] search_global_knowledge ─────────────────\n│  collection='bodhi_global_knowledge' limit={}\n│  query: {:?}\n└────────────────────────────────────────────────────────────",
+        limit,
+        query
+    );
+
     let client = Qdrant::from_url(qdrant_url).build()?;
     let model = BioLordEncoder::new(embedding_url);
 
@@ -169,15 +226,22 @@ pub async fn search_global_knowledge(
         .await?;
 
     let mut context = String::new();
+    let mut fact_count = 0usize;
     for hit in search_result.result {
         if let Some(payload_val) = hit.payload.get("fact") {
             if let Some(Kind::StringValue(text)) = &payload_val.kind {
                 context.push_str("- ");
                 context.push_str(text);
-                context.push_str("\n");
+                context.push('\n');
+                fact_count += 1;
             }
         }
     }
+
+    tracing::info!(
+        "└── [Qdrant ◀ RECV] search_global_knowledge ─────────────────\n│  ✅ {} fact(s) returned from BODHI global knowledge\n└────────────────────────────────────────────────────────────",
+        fact_count
+    );
 
     Ok(context)
 }
