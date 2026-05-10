@@ -21,6 +21,7 @@ pub async fn run_adjudication(
         graph.clone(),
         pg_pool.clone(),
         &config.qdrant_url,
+        &config.embedding_url,
         &document_text,
     )
     .await;

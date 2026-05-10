@@ -9,7 +9,9 @@ pub struct Config {
     pub qdrant_url: String,
     pub ocr_service_url: String,
     pub groq_api_key: String,
-    pub pg_url: String, // <--- ADD THIS
+    pub pg_url: String,
+    pub embedding_vector_size: usize,
+    pub embedding_url: String,
 }
 
 impl Config {
@@ -25,7 +27,13 @@ impl Config {
             groq_api_key: env::var("GROQ_API_KEY").unwrap_or_else(|_| "placeholder".to_string()),
             pg_url: env::var("PG_URL").unwrap_or_else(|_| {
                 "postgres://d3admin:graphbench2026@localhost:5432/nrces_dict".to_string()
-            }), // <--- ADD THIS
+            }),
+            embedding_vector_size: env::var("EMBEDDING_VECTOR_SIZE")
+                .unwrap_or_else(|_| "768".to_string())
+                .parse()
+                .unwrap_or(768),
+            embedding_url: env::var("EMBED_URL")
+                .unwrap_or_else(|_| "http://127.0.0.1:8000".to_string()),
         }
     }
 }

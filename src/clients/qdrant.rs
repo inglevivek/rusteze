@@ -1,4 +1,4 @@
-use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
+use crate::clients::encoder::BioLordEncoder;
 use qdrant_client::{
     qdrant::{
         value::Kind, Condition, CreateCollectionBuilder, Distance, Filter, PointStruct,
@@ -12,10 +12,38 @@ use uuid::Uuid;
 
 const COLLECTION_NAME: &str = "clinical_cases";
 
+pub async fn recreate_collection(
+    qdrant_url: &str,
+    collection_name: &str,
+    vector_size: u64,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let client = Qdrant::from_url(qdrant_url).build()?;
+
+    // Attempt DELETE collection -> ignore "not found" error
+    if let Err(e) = client.delete_collection(collection_name).await {
+        tracing::warn!("Failed to delete collection {} (may not exist): {}", collection_name, e);
+    }
+
+    client
+        .create_collection(
+            CreateCollectionBuilder::new(collection_name).vectors_config(VectorParams {
+                size: vector_size,
+                distance: Distance::Cosine.into(),
+                ..Default::default()
+            }),
+        )
+        .await?;
+
+    tracing::info!("[Qdrant] Recreated collection: {} with size {}", collection_name, vector_size);
+    Ok(())
+}
+
 pub async fn init_and_embed(
     qdrant_url: &str,
+    embedding_url: &str,
     raw_text: &str,
     case_id: &str,
+    vector_size: u64,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     tracing::info!("[Qdrant] Initializing Vector Store for Case: {}", case_id);
 
@@ -25,7 +53,7 @@ pub async fn init_and_embed(
         client
             .create_collection(
                 CreateCollectionBuilder::new(COLLECTION_NAME).vectors_config(VectorParams {
-                    size: 384, // bge-small dimension size
+                    size: vector_size,
                     distance: Distance::Cosine.into(),
                     ..Default::default()
                 }),
@@ -34,8 +62,7 @@ pub async fn init_and_embed(
         tracing::info!("[Qdrant] Created new collection: {}", COLLECTION_NAME);
     }
 
-    // FIX 1: model MUST be mut in fastembed v5
-    let mut model = TextEmbedding::try_new(InitOptions::new(EmbeddingModel::BGESmallENV15))?;
+    let model = BioLordEncoder::new(embedding_url);
 
     // Naive Chunking
     let chunks: Vec<String> = raw_text
@@ -48,7 +75,8 @@ pub async fn init_and_embed(
         return Ok(());
     }
 
-    let embeddings = model.embed(chunks.clone(), None)?;
+    let embeddings = model.embed(chunks.clone()).await
+        .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e))?;
 
     let mut points = Vec::new();
     for (i, embedding) in embeddings.into_iter().enumerate() {
@@ -81,15 +109,17 @@ pub async fn init_and_embed(
 
 pub async fn search_case_context(
     qdrant_url: &str,
+    embedding_url: &str,
     query: &str,
     case_id: &str,
     limit: u64,
 ) -> Result<String, Box<dyn Error + Send + Sync>> {
     let client = Qdrant::from_url(qdrant_url).build()?;
 
-    let mut model = TextEmbedding::try_new(InitOptions::new(EmbeddingModel::BGESmallENV15))?;
+    let model = BioLordEncoder::new(embedding_url);
 
-    let query_embedding = model.embed(vec![query.to_string()], None)?.pop().unwrap();
+    let query_embedding = model.embed(vec![query.to_string()]).await
+        .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e))?.pop().unwrap();
 
     // The Metadata Barrier: STRICT case_id filtering
     let case_filter = Filter::all([Condition::matches("case_id", case_id.to_string())]);
@@ -121,13 +151,15 @@ pub async fn search_case_context(
 }
 pub async fn search_global_knowledge(
     qdrant_url: &str,
+    embedding_url: &str,
     query: &str,
     limit: u64,
 ) -> Result<String, Box<dyn Error + Send + Sync>> {
     let client = Qdrant::from_url(qdrant_url).build()?;
-    let mut model = TextEmbedding::try_new(InitOptions::new(EmbeddingModel::BGESmallENV15))?;
+    let model = BioLordEncoder::new(embedding_url);
 
-    let query_embedding = model.embed(vec![query.to_string()], None)?.pop().unwrap();
+    let query_embedding = model.embed(vec![query.to_string()]).await
+        .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e))?.pop().unwrap();
 
     let search_result = client
         .search_points(

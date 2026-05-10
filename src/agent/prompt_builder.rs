@@ -10,6 +10,7 @@ pub async fn build_grounded_context(
     graph: Arc<Graph>,
     pg_pool: Arc<deadpool_postgres::Pool>,
     qdrant_url: &str,
+    embedding_url: &str,
     input_text: &str,
 ) -> String {
     tracing::info!("[PromptBuilder] Starting context build for input: \n---\n{}\n---", input_text);
@@ -104,7 +105,7 @@ pub async fn build_grounded_context(
     // Fetch Semantic Truth (Qdrant)
     let qdrant_context = if !entity_names.is_empty() {
         let global_search_query = format!("Medical facts regarding: {}", entity_names.join(", "));
-        match qdrant::search_global_knowledge(qdrant_url, &global_search_query, 10).await {
+        match qdrant::search_global_knowledge(qdrant_url, embedding_url, &global_search_query, 10).await {
             Ok(ctx) => ctx,
             Err(e) => {
                 tracing::error!("Qdrant global search failed: {}", e);

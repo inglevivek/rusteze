@@ -17,7 +17,7 @@ pub async fn process_chat(
     tracing::info!("[Chat] Searching context for Case ID: {}", case_id);
 
     // 1. Pull the top 5 most relevant chunks from Qdrant for this specific case
-    let case_context = match qdrant::search_case_context(&config.qdrant_url, &query, &case_id, 5).await {
+    let case_context = match qdrant::search_case_context(&config.qdrant_url, &config.embedding_url, &query, &case_id, 5).await {
         Ok(ctx) => ctx,
         Err(e) => {
             tracing::error!("Qdrant search failed: {}", e);
@@ -32,7 +32,8 @@ pub async fn process_chat(
         graph.clone(),
         pg_pool.clone(),
         &config.qdrant_url,
-        &case_context,
+        &config.embedding_url,
+        &query,
     )
     .await;
 

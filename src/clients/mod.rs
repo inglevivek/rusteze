@@ -5,3 +5,4 @@ pub mod ocr;
 pub mod ollama;
 pub mod postgres;
 pub mod qdrant;
+pub mod encoder;

@@ -1,7 +1,4 @@
-mod agent;
-mod clients;
-mod config;
-mod knowledge;
+use d3_graph_bench::{agent, clients, config, knowledge};
 
 use axum::{
     extract::{Json, Multipart, Path, State},
@@ -33,10 +30,19 @@ struct ChatRequest {
     query: String,
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
     tracing_subscriber::fmt::init();
 
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            async_main().await;
+        });
+}
+
+async fn async_main() {
     let cfg = config::Config::load();
 
     let graph_pool =
@@ -53,14 +59,14 @@ async fn main() {
 
     let main_llm = Arc::new(GroqClient {
         api_key: cfg.groq_api_key.clone(),
-        fast_model: "groq/compound-mini".to_string(),
-        heavy_model: "groq/compound".to_string(),
+        fast_model: "openai/gpt-oss-120b".to_string(),
+        heavy_model: "openai/gpt-oss-20b".to_string(),
     });
 
     let slm = Arc::new(GroqClient {
         api_key: cfg.groq_api_key.clone(),
-        fast_model: "groq/compound-mini".to_string(),
-        heavy_model: "groq/compound-mini".to_string(),
+        fast_model: "openai/gpt-oss-20b".to_string(),
+        heavy_model: "openai/gpt-oss-120b".to_string(),
     });
 
     let shared_state = Arc::new(AppState {
@@ -139,7 +145,14 @@ async fn handle_ingest(
         return Err("Error: No text could be extracted from provided documents".to_string());
     }
 
-    if let Err(e) = clients::qdrant::init_and_embed(&state.config.qdrant_url, &text, &case_id).await
+    if let Err(e) = clients::qdrant::init_and_embed(
+        &state.config.qdrant_url,
+        &state.config.embedding_url,
+        &text,
+        &case_id,
+        state.config.embedding_vector_size as u64,
+    )
+    .await
     {
         tracing::error!("Failed to embed document: {}", e);
     }
@@ -343,7 +356,15 @@ async fn handle_ingest_batch(
         }));
     }
 
-    if let Err(e) = clients::qdrant::init_and_embed(&state.config.qdrant_url, &aggregated_text, &case_id).await {
+    if let Err(e) = clients::qdrant::init_and_embed(
+        &state.config.qdrant_url,
+        &state.config.embedding_url,
+        &aggregated_text,
+        &case_id,
+        state.config.embedding_vector_size as u64,
+    )
+    .await
+    {
         tracing::error!("Failed to embed aggregated document: {}", e);
     }
 
