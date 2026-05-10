@@ -249,7 +249,8 @@ pub async fn search_global_knowledge(
     let mut context = String::new();
     let mut fact_count = 0usize;
     for hit in hits {
-        if let Some(payload_val) = hit.payload.get("fact") {
+        let payload_val = hit.payload.get("fact").or_else(|| hit.payload.get("text"));
+        if let Some(payload_val) = payload_val {
             if let Some(Kind::StringValue(text)) = &payload_val.kind {
                 context.push_str("- ");
                 context.push_str(text);
@@ -259,10 +260,19 @@ pub async fn search_global_knowledge(
         }
     }
 
-    tracing::info!(
-        "└── [Qdrant ◀ RECV] search_global_knowledge ─────────────────\n│  ✅ {} fact(s) returned from BODHI global knowledge\n└────────────────────────────────────────────────────────────",
-        fact_count
-    );
+    if fact_count > 0 {
+        tracing::info!(
+            "└── [Qdrant ◀ RECV] search_global_knowledge ─────────────────\n│  ✅ {} fact(s) returned from BODHI global knowledge\n└────────────────────────────────────────────────────────────",
+            fact_count
+        );
+    } else {
+        tracing::error!(
+            "└── [Qdrant ◀ RECV] search_global_knowledge ─────────────────\n\
+             │  ❌ 0 facts returned — bodhi_global_knowledge is EMPTY or payload key mismatch.\n\
+             │  Run: data_scripts/ingest.py to populate. Check payload key is \"fact\".\n\
+             └────────────────────────────────────────────────────────────"
+        );
+    }
 
     Ok(context)
 }

@@ -1,0 +1,7 @@
+{"id": "ceftriaxone-001", "fact": "Ceftriaxone is a third-generation cephalosporin antibiotic. Standard typhoid dose: 2g IV/IM once daily for 10-14 days. Covers Salmonella Typhi including many MDR strains."}
+{"id": "cefixime-001", "fact": "Cefixime is an oral third-generation cephalosporin. Used as step-down oral therapy after IV ceftriaxone for typhoid fever. Dose: 200mg twice daily or 400mg once daily for 7-14 days."}
+{"id": "paracetamol-001", "fact": "Paracetamol (acetaminophen) is an analgesic and antipyretic. Adult dose: 500-1000mg every 4-6h, max 4g/day. Used for fever management in typhoid. Hepatotoxic in overdose — monitor LFTs."}
+{"id": "pantoprazole-001", "fact": "Pantoprazole is a proton pump inhibitor (PPI). Dose: 40mg once daily before meals. Co-prescribed during antibiotic therapy to prevent antibiotic-associated gastritis and stress ulcer."}
+{"id": "typhoid-001", "fact": "Typhoid fever (Salmonella Typhi): presents with sustained fever, malaise, headache, rose spots, abdominal pain. CRP elevated. Blood culture is gold standard. IgM positive = recent/active infection."}
+{"id": "typhoid-002", "fact": "Typhoid fever complications: intestinal perforation, hepatitis (mild ALT rise common), myocarditis, encephalopathy. Monitor LFTs, CBC, CRP every 48-72h. Steroids for severe typhoid with neurological involvement."}
+{"id": "cefotroy-001", "fact": "Cefotroy-SB (ceftriaxone + sulbactam) is used for severe bacterial infections. Sulbactam extends coverage against beta-lactamase-producing organisms. IV administration, hospital setting."}

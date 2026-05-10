@@ -6,6 +6,26 @@ use std::sync::Arc;
 use neo4rs::Graph;
 use std::error::Error;
 
+/// Extracts the first substance word from a parenthetical in a drug name.
+/// "Cefotroy-SB Forte (ceftriaxone sodium and sulbactam sodium) 1g" → Some("ceftriaxone")
+/// "Neomol (paracetamol) 250 mg" → Some("paracetamol")
+fn extract_substance_from_parenthetical(name: &str) -> Option<String> {
+    let start = name.find('(')?;
+    let end = name.find(')')?;
+    if end <= start { return None; }
+    let inner = &name[start + 1..end];
+    let first = inner
+        .split(|c: char| c == ' ' || c == ',' || c == '/')
+        .next()
+        .unwrap_or("")
+        .trim();
+    if first.len() >= 4 && first.chars().all(|c| c.is_alphabetic()) {
+        Some(first.to_lowercase())
+    } else {
+        None
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ResolvedConcepts {
     /// BODHI-compatible snomed_ids ready for Neo4j queries
@@ -63,8 +83,39 @@ pub async fn resolve_entities(
             resolved_entity.concept_id = graph_id;
             successful_entities.push(resolved_entity);
         } else {
-            tracing::warn!("[Linker] ❌ DB Miss:  '{}' not found in dictionary", term);
-            db_misses.push(term.clone());
+            // Dash-strip fallback: "Pexime-200" → "Pexime", "Cefotroy-SB" → "Cefotroy"
+            // Handles brand-name + dosage/variant suffixes joined by a dash.
+            let stripped = term
+                .split('-')
+                .next()
+                .map(|s| s.trim().to_string())
+                .filter(|s| s.len() >= 4 && s != term);
+
+            let mut dash_hit = false;
+            if let Some(ref base) = stripped {
+                tracing::info!("[Linker] Trying dash-strip fallback: '{}' → '{}'", term, base);
+                if let Ok(Some(entity)) = crate::clients::postgres::search_dictionary_prefix(pool, base).await {
+                    let graph_id = entity.snomed_id
+                        .as_deref()
+                        .filter(|s| !s.is_empty())
+                        .unwrap_or_else(|| entity.concept_id.as_str())
+                        .trim()
+                        .to_string();
+                    tracing::info!(
+                        "[Linker] ✅ Dash-strip hit: '{}' → name='{}' snomed_id='{}'",
+                        term, entity.name, graph_id
+                    );
+                    let mut resolved_entity = entity;
+                    resolved_entity.concept_id = graph_id;
+                    successful_entities.push(resolved_entity);
+                    dash_hit = true;
+                }
+            }
+
+            if !dash_hit {
+                tracing::warn!("[Linker] ❌ DB Miss:  '{}' not found in dictionary", term);
+                db_misses.push(term.clone());
+            }
         }
     }
 
@@ -99,11 +150,25 @@ pub async fn resolve_entities(
         // Stage 3: Second DB Sweep for Normalized Terms
         tracing::info!("[Linker] ── Stage 3: Postgres re-sweep (normalized terms) ───");
         for (original, normalized) in normalized_map {
-            if normalized.trim().is_empty() {
-                tracing::error!(
-                    "[Linker] ❌ Hard Fail: '{}' was completely unmappable by LLM.",
-                    original
+            if normalized.trim().is_empty() || normalized.trim().eq_ignore_ascii_case("UNKNOWN") {
+                tracing::warn!(
+                    "[Linker] ⚠️ Hard Fail: '{}' unmappable (LLM returned '{}'). \
+                     Will fall through to BODHI_RESCUE injection.",
+                    original, normalized.trim()
                 );
+                // BODHI_RESCUE: inject raw original term so it at least appears in
+                // the neighborhood query attempt via Neo4j text index
+                successful_entities.push(crate::clients::postgres::ClinicalEntity {
+                    concept_id: original.trim().to_string(),
+                    snomed_id: None,
+                    term_type: "UNKNOWN_DRUG".to_string(),
+                    name: original.trim().to_string(),
+                    generic_concept_id: None,
+                    substance_name: None,
+                    generic_name: None,
+                    indication: None,
+                    interaction_with_drugs: None,
+                });
                 continue;
             }
 
@@ -157,11 +222,14 @@ pub async fn resolve_entities(
     let mut bridge_terms: Vec<String> = Vec::new();
 
     for entity in &successful_entities {
+        let mut got_bridge = false;
+
         if let Some(sub) = &entity.substance_name {
             // strip dosage suffixes: "paracetamol 500 mg" → "paracetamol"
             let base = sub.split_whitespace().next().unwrap_or(sub).to_string();
             if base.len() >= 4 {
                 bridge_terms.push(base);
+                got_bridge = true;
             }
         }
         if let Some(gen) = &entity.generic_name {
@@ -169,6 +237,19 @@ pub async fn resolve_entities(
             let base = gen.split_whitespace().next().unwrap_or(gen).to_string();
             if base.len() >= 4 {
                 bridge_terms.push(base);
+                got_bridge = true;
+            }
+        }
+
+        // Parenthetical fallback: parse "(ceftriaxone sodium ...)" from name
+        // when both substance_name and generic_name are None in the DB.
+        if !got_bridge {
+            if let Some(parsed) = extract_substance_from_parenthetical(&entity.name) {
+                tracing::info!(
+                    "[Linker] Parenthetical fallback: '{}' → bridge='{}'",
+                    entity.name, parsed
+                );
+                bridge_terms.push(parsed);
             }
         }
     }

@@ -13,6 +13,8 @@ pub struct Config {
     pub embedding_vector_size: usize,
     pub embedding_url: String,
     pub ollama_url: String,
+    pub main_model: String,
+    pub slm_model: String,
 }
 
 impl Config {
@@ -37,6 +39,8 @@ impl Config {
                 .unwrap_or_else(|_| "http://127.0.0.1:8000".to_string()),
             ollama_url: env::var("OLLAMA_URL")
                 .unwrap_or_else(|_| "http://127.0.0.1:11434".to_string()),
+            main_model: env::var("MAIN_LLM_MODEL").unwrap_or_else(|_| "qwen3.5:9B".to_string()),
+            slm_model: env::var("SLM_MODEL").unwrap_or_else(|_| "qwen2.5:3b".to_string()),
         }
     }
 }

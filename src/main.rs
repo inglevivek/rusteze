@@ -59,21 +59,19 @@ async fn async_main() {
     //     .spawn()
     //     .map_err(|e| tracing::warn!("Failed to start Ollama automatically: {}", e));
 
-    let main_llm = Arc::new(GroqClient {
-        api_key: cfg.groq_api_key.clone(),
-        fast_model: "compound-beta-mini".to_string(),
-        heavy_model: "compound-beta".to_string(),
+    let main_llm = Arc::new(OllamaClient {
+        base_url: cfg.ollama_url.clone(),
+        model: cfg.main_model.clone(),
     });
 
-    let slm = Arc::new(GroqClient {
-        api_key: cfg.groq_api_key.clone(),
-        fast_model: "compound-beta-mini".to_string(),
-        heavy_model: "compound-beta".to_string(),
+    let slm = Arc::new(OllamaClient {
+        base_url: cfg.ollama_url.clone(),
+        model: cfg.slm_model.clone(),
     });
 
     let ner_llm = Arc::new(OllamaClient {
         base_url: cfg.ollama_url.clone(),
-        model: "qwen2.5:3b".to_string(),
+        model: cfg.slm_model.clone(),
     });
 
     // Verify bodhi_global_knowledge is populated at startup

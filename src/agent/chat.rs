@@ -15,6 +15,18 @@ pub async fn process_chat(
     case: crate::clients::postgres::Case,
     query: String,
 ) -> String {
+    // Guard: detect if the caller accidentally passed a massive/junk string, 
+    // but allow legitimate large clinical documents (up to 100k chars).
+    if query.len() > 100000 {
+        tracing::error!(
+            "[Chat] ❌ INVALID QUERY: received oversized string as user query. \
+             len={} preview='{}...'",
+            query.len(),
+            &query[..query.len().min(120)]
+        );
+        return "Internal error: query string is too large.".to_string();
+    }
+
     let case_id = &case.case_id;
     tracing::info!("[Chat] Searching context for Case ID: {}", case_id);
 

@@ -174,7 +174,18 @@ Now extract from the provided text."#;
         let terms_json = serde_json::to_string(terms)?;
         let prompt = format!(
             "You are a strict clinical terminologist. Given the following JSON array of extracted OCR terms, convert each term into its base generic medication or standard clinical diagnosis name. \
-            Output ONLY a JSON object where the keys are the EXACT original terms provided, and the values are the normalized generic names. If a term is invalid or cannot be normalized, map it to an empty string.\n\nTerms: {}",
+            Output ONLY a JSON object where the keys are the EXACT original terms provided, and the values are the normalized generic names. If a term is invalid or cannot be normalized, map it to an empty string.\n\n\
+            RULES:\n\
+            1. medications = generic name (e.g. 'cefixime', 'paracetamol').\n\
+            2. diagnoses = standard clinical term (e.g. 'Typhoid fever').\n\
+            3. DO NOT include patient info, lab values, or dates.\n\
+            4. If a drug or diagnosis is repeated, include it only once.\n\
+            5. For brand names with a dash+number suffix (e.g. 'Pexime-200', 'Augmentin-625'), \
+               strip the suffix and return just the brand root: 'Pexime', 'Augmentin'. \
+               Do NOT return empty string for branded drugs you recognise at the root level.\n\
+            6. If you truly cannot map a term, return the string 'UNKNOWN' (not empty string). \
+               Empty string means the term was present in the prompt but you skipped it.\n\n\
+            Terms: {}",
             terms_json
         );
 
