@@ -5,11 +5,16 @@ use tokio_postgres::NoTls;
 
 #[derive(Debug, Clone)]
 pub struct ClinicalEntity {
-    pub concept_id: String,   // Will hold the snomed_id after linker resolution
-    pub snomed_id: Option<String>, // Raw snomed_id from Postgres dictionary
-    pub term_type: String,
-    pub name: String,
+    pub concept_id:        String,
+    pub snomed_id:         Option<String>,
+    pub term_type:         String,
+    pub name:              String,
     pub generic_concept_id: Option<String>,
+    // ── NEW fields ──────────────────────────────────────────────
+    pub substance_name:    Option<String>,  // e.g. "paracetamol", "cefixime"
+    pub generic_name:      Option<String>,  // e.g. "cefixime 200 mg oral tablet"
+    pub indication:        Option<String>,
+    pub interaction_with_drugs: Option<String>,
 }
 
 pub async fn establish_pool(pg_url: &str) -> Pool {
@@ -47,7 +52,7 @@ pub async fn search_dictionary(
 ) -> Result<Option<ClinicalEntity>, Box<dyn Error + Send + Sync>> {
     let client = pool.get().await?;
 
-    let sql = "SELECT concept_id, term_type, name, generic_concept_id, snomed_id FROM dictionary WHERE name ILIKE $1 LIMIT 1";
+    let sql = "SELECT concept_id, term_type, name, generic_concept_id, snomed_id,            substance_name, generic_name, indication, interaction_with_drugs            FROM dictionary WHERE name ILIKE $1 LIMIT 1";
     let query_term = format!("%{}%", term);
 
     tracing::info!(
@@ -61,11 +66,15 @@ pub async fn search_dictionary(
 
     if let Some(row) = rows.first() {
         let entity = ClinicalEntity {
-            concept_id: row.get(0),
-            snomed_id: row.try_get(4).ok(),
-            term_type: row.get(1),
-            name: row.get(2),
-            generic_concept_id: row.get(3),
+            concept_id:             row.get(0),
+            term_type:              row.get(1),
+            name:                   row.get(2),
+            generic_concept_id:     row.try_get(3).ok(),
+            snomed_id:              row.try_get(4).ok(),
+            substance_name:         row.try_get(5).ok(),
+            generic_name:           row.try_get(6).ok(),
+            indication:             row.try_get(7).ok(),
+            interaction_with_drugs: row.try_get(8).ok(),
         };
         tracing::info!(
             "└── [Postgres ◀ RECV] search_dictionary ─────────────────────\n│  ✅ HIT  name='{}' concept_id='{}' snomed_id={:?} type='{}'\n└────────────────────────────────────────────────────────────",
@@ -80,6 +89,47 @@ pub async fn search_dictionary(
             "└── [Postgres ◀ RECV] search_dictionary ─────────────────────\n│  ❌ MISS  no match for {:?}\n└────────────────────────────────────────────────────────────",
             query_term
         );
+        Ok(None)
+    }
+}
+
+/// Prefix-only lookup — term must appear at the START of the brand name.
+/// Used by the keyword sweep to prevent "SUGAR" matching "Rosugard Gold".
+pub async fn search_dictionary_prefix(
+    pool: &Pool,
+    term: &str,
+) -> Result<Option<ClinicalEntity>, Box<dyn Error + Send + Sync>> {
+    let client = pool.get().await?;
+    let sql = "SELECT concept_id, term_type, name, generic_concept_id, snomed_id,                substance_name, generic_name, indication, interaction_with_drugs                FROM dictionary WHERE name ILIKE $1 LIMIT 1";
+    // Prefix match: term% not %term%
+    let query_term = format!("{}%", term);
+
+    tracing::info!(
+        "┌── [Postgres ▶ SEND] search_dictionary_prefix ──────────────\n│  term: {:?}\n└────────────────────────────────────────────────────────────",
+        query_term
+    );
+
+    let stmt = client.prepare(sql).await?;
+    let rows = client.query(&stmt, &[&query_term]).await?;
+
+    if let Some(row) = rows.first() {
+        let entity = ClinicalEntity {
+            concept_id:             row.get(0),
+            term_type:              row.get(1),
+            name:                   row.get(2),
+            generic_concept_id:     row.try_get(3).ok(),
+            snomed_id:              row.try_get(4).ok(),
+            substance_name:         row.try_get(5).ok(),
+            generic_name:           row.try_get(6).ok(),
+            indication:             row.try_get(7).ok(),
+            interaction_with_drugs: row.try_get(8).ok(),
+        };
+        tracing::info!(
+            "└── [Postgres ◀ RECV] search_dictionary_prefix ──────────────\n│  ✅ HIT  name='{}'\n└────────────────────────────────────────────────────────────",
+            entity.name
+        );
+        Ok(Some(entity))
+    } else {
         Ok(None)
     }
 }

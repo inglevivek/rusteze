@@ -10,27 +10,40 @@ pub async fn run_adjudication(
     config: Config,
     main_llm: Arc<dyn AgentClient>,
     slm: Arc<dyn AgentClient>,
+    ner_llm: Arc<dyn AgentClient>,
     graph: Arc<Graph>,
     pg_pool: Arc<deadpool_postgres::Pool>,
-    document_text: String,
+    case: crate::clients::postgres::Case,
 ) -> String {
+    let document_text = &case.document_text;
     tracing::info!("[Pipeline] Initiating Dual-Brain GraphRAG Adjudication...");
 
-    // 1. Extract entities for graph medical necessity checks
-    let extracted_json = main_llm
+    // 1. Extract entities for graph medical necessity checks using the local NER LLM
+    let extracted_json = ner_llm
         .extract_entities(&document_text)
         .await
         .unwrap_or_default();
 
     let mut raw_terms = Vec::new();
+    let mut diagnoses_strings = Vec::new();
     if let Some(meds) = extracted_json["medications"].as_array() {
         for m in meds { raw_terms.push(m.as_str().unwrap_or("").to_string()); }
     }
     if let Some(diags) = extracted_json["diagnoses"].as_array() {
-        for d in diags { raw_terms.push(d.as_str().unwrap_or("").to_string()); }
+        for d in diags {
+            let s = d.as_str().unwrap_or("").to_string();
+            raw_terms.push(s.clone());
+            diagnoses_strings.push(s);
+        }
     }
 
-    let resolved = linker::resolve_entities(&pg_pool, slm.clone(), raw_terms).await;
+    let resolved = match linker::resolve_entities(&pg_pool, slm.clone(), &graph, raw_terms, diagnoses_strings).await {
+        Ok(r) => r.entities, // We only need the entities for necessity checks here
+        Err(e) => {
+            tracing::error!("[Pipeline] Linker failed: {}", e);
+            vec![]
+        }
+    };
 
     // 2. Run check_medical_necessity for every (diagnosis, drug) pair
     let diagnoses: Vec<_> = resolved.iter().filter(|e| e.term_type == "Disorder" || e.term_type == "Condition").collect();
@@ -55,13 +68,14 @@ pub async fn run_adjudication(
 
     // 3. Build grounded context (Neo4j neighborhood + Qdrant semantic)
     let grounded_context = build_grounded_context(
-        main_llm.clone(),
+        ner_llm.clone(),
         slm.clone(),
         graph.clone(),
         pg_pool.clone(),
+        &case,
         &config.qdrant_url,
         &config.embedding_url,
-        &document_text,
+        &[],
     )
     .await;
 

@@ -9,14 +9,15 @@ pub async fn process_chat(
     config: Config,
     main_llm: Arc<dyn AgentClient>,
     slm: Arc<dyn AgentClient>,
+    ner_llm: Arc<dyn AgentClient>,
     graph: Arc<Graph>,
     pg_pool: Arc<deadpool_postgres::Pool>,
-    case_id: String,
+    case: crate::clients::postgres::Case,
     query: String,
 ) -> String {
+    let case_id = &case.case_id;
     tracing::info!("[Chat] Searching context for Case ID: {}", case_id);
 
-    // 1. Pull the top 5 most relevant chunks from Qdrant for this specific case
     let case_context = match qdrant::search_case_context(&config.qdrant_url, &config.embedding_url, &query, &case_id, 5).await {
         Ok(ctx) => ctx,
         Err(e) => {
@@ -24,22 +25,19 @@ pub async fn process_chat(
             "".to_string()
         }
     };
+    let case_context_split: Vec<String> = case_context.lines().map(|s| s.to_string()).collect();
 
-    // 2. Build the grounded context (Graph + Global Qdrant) based on the user's query
-    let ner_input = if case_context.trim().is_empty() {
-        query.clone()
-    } else {
-        format!("{}\n\nUser Query: {}", case_context, query)
-    };
+
 
     let grounded_context = build_grounded_context(
-        main_llm.clone(),
+        ner_llm.clone(),
         slm.clone(),
         graph.clone(),
         pg_pool.clone(),
+        &case,
         &config.qdrant_url,
         &config.embedding_url,
-        &ner_input,
+        &case_context_split,
     )
     .await;
 
@@ -55,7 +53,9 @@ pub async fn process_chat(
 
     // 4. Fire at the LLM
     match main_llm.chat_with_context(&system_prompt, &query).await {
-        Ok(response) => response,
+        Ok(response) => {
+            format!("{}\n\n---\n**Grounding Context (Neo4j + BODHI):**\n{}", response, grounded_context)
+        },
         Err(e) => format!("Error communicating with LLM: {}", e),
     }
 }

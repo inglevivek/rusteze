@@ -1,4 +1,4 @@
-use d3_graph_bench::{agent, clients, config, knowledge};
+use d3_graph_bench::{agent, clients, config};
 
 use axum::{
     extract::{Json, Multipart, Path, State},
@@ -14,6 +14,7 @@ use tower_http::services::ServeDir;
 
 use clients::agentic::AgentClient;
 use clients::groq::GroqClient;
+use clients::ollama::OllamaClient;
 
 #[derive(Clone)]
 struct AppState {
@@ -22,6 +23,7 @@ struct AppState {
     pg_pool: Arc<Pool>,
     main_llm: Arc<dyn AgentClient>,
     slm: Arc<dyn AgentClient>,
+    ner_llm: Arc<dyn AgentClient>,
 }
 
 #[derive(Deserialize)]
@@ -69,12 +71,18 @@ async fn async_main() {
         heavy_model: "compound-beta".to_string(),
     });
 
+    let ner_llm = Arc::new(OllamaClient {
+        base_url: cfg.ollama_url.clone(),
+        model: "qwen2.5:3b".to_string(),
+    });
+
     let shared_state = Arc::new(AppState {
         config: cfg,
         graph: graph_pool,
         pg_pool: Arc::new(pg_pool),
         main_llm,
         slm,
+        ner_llm,
     });
 
     let app = Router::new()
@@ -162,13 +170,21 @@ async fn handle_ingest(
         tracing::error!("Failed to save case record: {}", e);
     }
 
+    let case = clients::postgres::Case {
+        case_id: case_id.clone(),
+        document_text: text,
+        adjudication_report: None,
+        created_at: "".to_string(),
+    };
+
     let final_report = agent::pipeline::run_adjudication(
         state.config.clone(),
         state.main_llm.clone(),
         state.slm.clone(),
+        state.ner_llm.clone(),
         state.graph.clone(),
         state.pg_pool.clone(),
-        text,
+        case,
     )
     .await;
 
@@ -191,7 +207,8 @@ async fn handle_chat(
     }
 
     // Validate case exists before touching LLM stack
-    match clients::postgres::get_case(&state.pg_pool, &payload.case_id).await {
+    let case = match clients::postgres::get_case(&state.pg_pool, &payload.case_id).await {
+        Ok(Some(c)) => c,
         Ok(None) => {
             return Err(format!(
                 "Case '{}' not found. Please ingest the case documents first via /api/ingest.",
@@ -202,16 +219,16 @@ async fn handle_chat(
             tracing::error!("[Chat] DB error checking case existence: {}", e);
             return Err("Database error validating case ID.".to_string());
         }
-        Ok(Some(_)) => {} // proceed
-    }
+    };
 
     let response = agent::chat::process_chat(
         state.config.clone(),
         state.main_llm.clone(),
         state.slm.clone(),
+        state.ner_llm.clone(),
         state.graph.clone(),
         state.pg_pool.clone(),
-        payload.case_id,
+        case,
         payload.query,
     )
     .await;
@@ -387,13 +404,21 @@ async fn handle_ingest_batch(
         tracing::error!("Failed to save case record: {}", e);
     }
 
+    let case = clients::postgres::Case {
+        case_id: case_id.clone(),
+        document_text: aggregated_text,
+        adjudication_report: None,
+        created_at: "".to_string(),
+    };
+
     let final_report = agent::pipeline::run_adjudication(
         state.config.clone(),
         state.main_llm.clone(),
         state.slm.clone(),
+        state.ner_llm.clone(),
         state.graph.clone(),
         state.pg_pool.clone(),
-        aggregated_text,
+        case,
     )
     .await;
 

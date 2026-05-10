@@ -13,26 +13,65 @@ pub struct OllamaClient {
 impl AgentClient for OllamaClient {
     async fn extract_entities(&self, text: &str) -> Result<Value, Box<dyn Error + Send + Sync>> {
         let client = Client::new();
-        let prompt = format!(
-            "Extract all medications/drugs and diagnoses from the following text. Output strictly as JSON in this format: {{\"medications\": [\"drug1\"], \"diagnoses\": [\"diag1\"]}}. No other text.\n\nText: {}",
-            text
+
+        let system_msg = r#"You are a clinical Named Entity Recognition (NER) extractor.
+Your ONLY job is to find drug/medication names and clinical diagnosis names in the provided text.
+Return ONLY this exact JSON object, no markdown, no explanation:
+{"medications": ["drug_name_1", ...], "diagnoses": ["diagnosis_name_1", ...]}
+If none found, return: {"medications": [], "diagnoses": []}
+Do NOT return any other keys or schema."#;
+
+        let user_msg = format!("Extract clinical entities from this text:\n\n{}", text);
+
+        tracing::info!(
+            "┌── [Ollama ▶ SEND] extract_entities ────────────────────────\n│  model: {}\n│  input_len: {} chars\n└────────────────────────────────────────────────────────────",
+            &self.model,
+            text.len()
         );
 
-        let res = client.post(&format!("{}/api/generate", self.base_url))
+        let res = client.post(&format!("{}/api/chat", self.base_url))
             .json(&json!({
                 "model": &self.model,
-                "prompt": prompt,
+                "messages": [
+                    {"role": "system", "content": system_msg},
+                    {"role": "user",   "content": user_msg}
+                ],
                 "stream": false,
-                "format": "json"
+                "format": "json",
+                "options": {
+                    "temperature": 0.0,
+                    "num_ctx": 20480
+                }
             }))
             .send()
             .await?;
 
-        let json_body: Value = res.json().await?;
-        if let Some(response) = json_body["response"].as_str() {
-            return Ok(serde_json::from_str(response)?);
+        let json_body: Value = match res.json().await {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::error!("[Ollama] Failed to parse JSON response: {}", e);
+                return Err(e.into());
+            }
+        };
+
+        let content = json_body["message"]["content"]
+            .as_str()
+            .unwrap_or("");
+
+        if content.is_empty() {
+            tracing::warn!("[Ollama] Empty content received. Full body: {}", json_body);
         }
-        Err("Ollama extraction failed".into())
+
+        tracing::info!(
+            "└── [Ollama ◀ RECV] extract_entities ────────────────────────\n│  Raw NER JSON: {}\n└────────────────────────────────────────────────────────────",
+            content
+        );
+
+        let parsed: Value = serde_json::from_str(content).map_err(|e| {
+            tracing::error!("[Ollama] Failed to parse content as JSON: {}. Content: {}", e, content);
+            e
+        })?;
+        Ok(parsed)
     }
 
     async fn chat_with_context(
@@ -41,21 +80,39 @@ impl AgentClient for OllamaClient {
         user_query: &str,
     ) -> Result<String, Box<dyn Error + Send + Sync>> {
         let client = Client::new();
-        let prompt = format!("{}\n\nUser: {}", system_prompt, user_query);
-        let res = client.post(&format!("{}/api/generate", self.base_url))
+        
+        tracing::info!(
+            "┌── [Ollama ▶ SEND] chat_with_context ───────────────────────\n│  model: {}\n└────────────────────────────────────────────────────────────",
+            &self.model
+        );
+
+        let res = client.post(&format!("{}/api/chat", self.base_url))
             .json(&json!({
                 "model": &self.model,
-                "prompt": prompt,
-                "stream": false
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user",   "content": user_query}
+                ],
+                "stream": false,
+                "options": {
+                    "temperature": 0.2,
+                    "num_ctx": 20480
+                }
             }))
             .send()
             .await?;
 
         let json_body: Value = res.json().await?;
-        if let Some(response) = json_body["response"].as_str() {
-            return Ok(response.to_string());
-        }
-        Err("Ollama chat failed".into())
+        let content = json_body["message"]["content"]
+            .as_str()
+            .ok_or("Ollama chat failed to return content")?;
+
+        tracing::info!(
+            "└── [Ollama ◀ RECV] chat_with_context ───────────────────────\n│  Response len: {} chars\n└────────────────────────────────────────────────────────────",
+            content.len()
+        );
+
+        Ok(content.to_string())
     }
 
     async fn normalize_term(&self, term: &str) -> Result<String, Box<dyn Error + Send + Sync>> {
@@ -65,22 +122,25 @@ impl AgentClient for OllamaClient {
             term
         );
 
-        let res = client.post(&format!("{}/api/generate", self.base_url))
+        let res = client.post(&format!("{}/api/chat", self.base_url))
             .json(&json!({
                 "model": &self.model,
-                "prompt": prompt,
-                "stream": false
+                "messages": [{"role": "user", "content": prompt}],
+                "stream": false,
+                "options": {
+                    "temperature": 0.0,
+                    "num_ctx": 20480
+                }
             }))
             .send()
             .await?;
 
-        if res.status().is_success() {
-            let json_body: Value = res.json().await?;
-            if let Some(response) = json_body["response"].as_str() {
-                return Ok(response.trim().to_string());
-            }
-        }
-        Err("Local Ollama Agent failed to respond properly".into())
+        let json_body: Value = res.json().await?;
+        let content = json_body["message"]["content"]
+            .as_str()
+            .unwrap_or("");
+            
+        Ok(content.trim().to_string())
     }
 
     async fn normalize_terms(
@@ -99,22 +159,27 @@ impl AgentClient for OllamaClient {
             terms_json
         );
 
-        let res = client.post(&format!("{}/api/generate", self.base_url))
+        let res = client.post(&format!("{}/api/chat", self.base_url))
             .json(&json!({
                 "model": &self.model,
-                "prompt": prompt,
+                "messages": [{"role": "user", "content": prompt}],
                 "stream": false,
-                "format": "json"
+                "format": "json",
+                "options": {
+                    "temperature": 0.0,
+                    "num_ctx": 20480
+                }
             }))
             .send()
             .await?;
 
         let json_body: Value = res.json().await?;
-        if let Some(response) = json_body["response"].as_str() {
-            let map: std::collections::HashMap<String, String> = serde_json::from_str(response)?;
-            return Ok(map);
-        }
-        Err("Ollama bulk normalization failed".into())
+        let content = json_body["message"]["content"]
+            .as_str()
+            .unwrap_or("{}");
+
+        let map: std::collections::HashMap<String, String> = serde_json::from_str(content)?;
+        Ok(map)
     }
 
     async fn generate_adjudication_report(
@@ -131,20 +196,25 @@ impl AgentClient for OllamaClient {
             context
         );
 
-        let res = client.post(&format!("{}/api/generate", self.base_url))
+        let res = client.post(&format!("{}/api/chat", self.base_url))
             .json(&json!({
                 "model": &self.model,
-                "prompt": prompt,
+                "messages": [{"role": "user", "content": prompt}],
                 "stream": false,
-                "format": "json"
+                "format": "json",
+                "options": {
+                    "temperature": 0.1,
+                    "num_ctx": 20480
+                }
             }))
             .send()
             .await?;
 
         let json_body: Value = res.json().await?;
-        if let Some(response) = json_body["response"].as_str() {
-            return Ok(response.to_string());
-        }
-        Err("Ollama adjudication failed".into())
+        let content = json_body["message"]["content"]
+            .as_str()
+            .unwrap_or("{}");
+
+        Ok(content.to_string())
     }
 }

@@ -12,6 +12,7 @@ pub struct Config {
     pub pg_url: String,
     pub embedding_vector_size: usize,
     pub embedding_url: String,
+    pub ollama_url: String,
 }
 
 impl Config {
@@ -34,6 +35,8 @@ impl Config {
                 .unwrap_or(768),
             embedding_url: env::var("EMBED_URL")
                 .unwrap_or_else(|_| "http://127.0.0.1:8000".to_string()),
+            ollama_url: env::var("OLLAMA_URL")
+                .unwrap_or_else(|_| "http://127.0.0.1:11434".to_string()),
         }
     }
 }

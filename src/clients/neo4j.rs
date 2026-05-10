@@ -27,6 +27,66 @@ pub async fn establish_connection(uri: &str, user: &str, pass: &str) -> Arc<Grap
     Arc::new(graph)
 }
 
+/// Given substance/generic names from NRCES, find the matching snomed_ids
+/// that actually exist inside the BODHI graph (bodhi-m Drug/Concept nodes).
+/// Returns deduplicated snomed_id strings ready for pathway queries.
+pub async fn resolve_bodhi_snomed_ids(
+    graph: &Graph,
+    terms: &[String],          // substance_names + generic_names + raw diagnoses
+) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
+    if terms.is_empty() {
+        return Ok(vec![]);
+    }
+
+    // Each term is searched independently; we collect all matches.
+    // BODHI-m Drug and Concept nodes both carry `snomed_id` and `synonyms`.
+    // BODHI-s Condition/Symptom nodes also carry `snomed_id` and `name`.
+    let cypher = "
+        UNWIND $terms AS term
+        OPTIONAL MATCH (d:Drug)
+            WHERE toLower(d.name) CONTAINS toLower(term)
+               OR d.synonyms CONTAINS term
+        OPTIONAL MATCH (c:Concept)
+            WHERE toLower(c.name) CONTAINS toLower(term)
+               OR toLower(c.display_name) CONTAINS toLower(term)
+               OR c.synonyms CONTAINS term
+        OPTIONAL MATCH (cond:Condition)
+            WHERE toLower(cond.name) CONTAINS toLower(term)
+        OPTIONAL MATCH (s:Symptom)
+            WHERE toLower(s.name) CONTAINS toLower(term)
+        WITH
+            collect(d.snomed_id) + collect(c.snomed_id) +
+            collect(cond.snomed_id) + collect(s.snomed_id) AS all_ids
+        UNWIND all_ids AS sid
+        WITH sid WHERE sid IS NOT NULL
+        RETURN DISTINCT sid
+        LIMIT 30
+    ";
+
+    tracing::info!(
+        "┌── [Neo4j ▶ SEND] resolve_bodhi_snomed_ids ─────────────────\n│  Resolving {} term(s) to BODHI snomed_ids\n│  terms={:?}\n└────────────────────────────────────────────────────────────",
+        terms.len(), terms
+    );
+
+    let mut result = graph.execute(
+        neo4rs::query(cypher).param("terms", terms.to_vec())
+    ).await?;
+
+    let mut ids: Vec<String> = Vec::new();
+    while let Ok(Some(row)) = result.next().await {
+        if let Ok(sid) = row.get::<String>("sid") {
+            ids.push(sid);
+        }
+    }
+
+    tracing::info!(
+        "└── [Neo4j ◀ RECV] resolve_bodhi_snomed_ids ─────────────────\n│  {} BODHI snomed_id(s) resolved: {:?}\n└────────────────────────────────────────────────────────────",
+        ids.len(), ids
+    );
+
+    Ok(ids)
+}
+
 /// Checks if a Drug (snomed_id = med_id) has an IMPACTS edge to a Concept/Condition (snomed_id = diag_id).
 /// BODHI-M: (Drug)-[:IMPACTS]->(Concept)
 /// Returns true if the graph confirms medical necessity.
@@ -87,17 +147,15 @@ pub async fn fetch_deterministic_pathways(
     }
 
     let q = "
+        UNWIND $ids AS id
         MATCH (a)-[r]->(b)
-        WHERE
-          (a:Concept OR a:Condition OR a:Drug OR a:LabInvestigation OR a:Symptom)
-          AND
-          (b:Concept OR b:Condition OR b:Drug OR b:LabInvestigation OR b:Symptom OR b:Speciality)
+        WHERE (a:Drug OR a:Concept OR a:Condition OR a:Symptom OR a:LabInvestigation)
+          AND (b:Drug OR b:Concept OR b:Condition OR b:Symptom OR b:LabInvestigation)
           AND a.snomed_id IN $ids
           AND b.snomed_id IN $ids
-        RETURN
-          a.snomed_id AS source,
-          type(r)     AS relation,
-          b.snomed_id AS target
+        RETURN a.name AS from_name, type(r) AS rel, b.name AS to_name,
+               a.snomed_id AS from_id, b.snomed_id AS to_id
+        LIMIT 100
     ";
 
     tracing::info!(
@@ -112,9 +170,9 @@ pub async fn fetch_deterministic_pathways(
 
     let mut pathways = Vec::new();
     while let Ok(Some(row)) = result.next().await {
-        let source: String = row.get("source").unwrap_or_default();
-        let relation: String = row.get("relation").unwrap_or_default();
-        let target: String = row.get("target").unwrap_or_default();
+        let source: String = row.get("from_id").unwrap_or_default();
+        let relation: String = row.get("rel").unwrap_or_default();
+        let target: String = row.get("to_id").unwrap_or_default();
         pathways.push((source, relation, target));
     }
 
@@ -151,16 +209,14 @@ pub async fn fetch_entity_neighborhood(
     }
 
     let q = "
+        UNWIND $ids AS id
         MATCH (a)-[r]-(b)
-        WHERE
-          (a:Concept OR a:Condition OR a:Drug OR a:LabInvestigation OR a:Symptom)
-          AND a.snomed_id IN $ids
-        RETURN
-          a.snomed_id                          AS source_id,
-          coalesce(a.display_name, a.name)     AS source_name,
-          type(r)                              AS relation,
-          coalesce(b.snomed_id, b.id, '')    AS target_id,
-          coalesce(b.display_name, b.name, b.id, '') AS target_name
+        WHERE (a:Drug OR a:Concept OR a:Condition OR a:Symptom OR a:LabInvestigation)
+          AND a.snomed_id = id
+        RETURN a.name AS center_name, a.snomed_id AS center_id,
+               type(r) AS rel, b.name AS neighbor_name,
+               b.snomed_id AS neighbor_id,
+               labels(b) AS neighbor_labels
         LIMIT 50
     ";
 
@@ -176,11 +232,11 @@ pub async fn fetch_entity_neighborhood(
 
     let mut neighborhood = Vec::new();
     while let Ok(Some(row)) = result.next().await {
-        let source_id: String   = row.get("source_id").unwrap_or_default();
-        let source_name: String = row.get("source_name").unwrap_or_default();
-        let relation: String    = row.get("relation").unwrap_or_default();
-        let target_id: String   = row.get("target_id").unwrap_or_default();
-        let target_name: String = row.get("target_name").unwrap_or_default();
+        let source_id: String   = row.get("center_id").unwrap_or_default();
+        let source_name: String = row.get("center_name").unwrap_or_default();
+        let relation: String    = row.get("rel").unwrap_or_default();
+        let target_id: String   = row.get("neighbor_id").unwrap_or_default();
+        let target_name: String = row.get("neighbor_name").unwrap_or_default();
         neighborhood.push((source_id, relation, target_id, source_name, target_name));
     }
 
