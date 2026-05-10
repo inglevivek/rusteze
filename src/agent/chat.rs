@@ -26,6 +26,12 @@ pub async fn process_chat(
     };
 
     // 2. Build the grounded context (Graph + Global Qdrant) based on the user's query
+    let ner_input = if case_context.trim().is_empty() {
+        query.clone()
+    } else {
+        format!("{}\n\nUser Query: {}", case_context, query)
+    };
+
     let grounded_context = build_grounded_context(
         main_llm.clone(),
         slm.clone(),
@@ -33,7 +39,7 @@ pub async fn process_chat(
         pg_pool.clone(),
         &config.qdrant_url,
         &config.embedding_url,
-        &query,
+        &ner_input,
     )
     .await;
 

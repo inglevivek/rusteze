@@ -16,22 +16,53 @@ pub async fn build_grounded_context(
     tracing::info!("[PromptBuilder] Starting context build...");
 
     // 1. NER: extract medications and diagnoses
-    let extracted_json = main_llm
-        .extract_entities(input_text)
-        .await
+    let extracted_json = match main_llm.extract_entities(input_text).await {
+        Ok(v) => {
+            tracing::debug!("[PromptBuilder] NER response: {}", v);
+            v
+        }
+        Err(e) => {
+            tracing::error!("[PromptBuilder] NER call failed: {}", e);
+            return "NER failed — check Groq API key and model name in config.".to_string();
+        }
+    };
+
+    let medications = extracted_json["medications"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let diagnoses = extracted_json["diagnoses"]
+        .as_array()
+        .cloned()
         .unwrap_or_default();
 
-    let mut raw_terms = Vec::new();
-    if let Some(meds) = extracted_json["medications"].as_array() {
-        for m in meds { raw_terms.push(m.as_str().unwrap_or("").to_string()); }
-    }
-    if let Some(diags) = extracted_json["diagnoses"].as_array() {
-        for d in diags { raw_terms.push(d.as_str().unwrap_or("").to_string()); }
+    // Fix 3: Schema bleed guard — detect if adjudication schema leaked into NER response
+    if medications.is_empty() && diagnoses.is_empty() {
+        if extracted_json.get("fraud_risk_misdx_mgmt").is_some()
+            || extracted_json.get("case_id").is_some()
+            || extracted_json.get("decision").is_some()
+        {
+            tracing::error!(
+                "[PromptBuilder] ❗ NER returned ADJUDICATION schema instead of NER schema! \
+                 Keys found: {:?}. Check extract_entities system prompt for format_instructions bleed.",
+                extracted_json.as_object().map(|m| m.keys().cloned().collect::<Vec<_>>())
+            );
+            return "NER schema mismatch — adjudication prompt contaminating NER call.".to_string();
+        }
     }
 
-    if raw_terms.is_empty() {
-        tracing::warn!("[PromptBuilder] NER found no entities.");
-        return "No specific topological or semantic context found.".to_string();
+    let mut raw_terms: Vec<String> = Vec::new();
+    for m in &medications {
+        if let Some(s) = m.as_str() {
+            let s = s.trim();
+            if !s.is_empty() { raw_terms.push(s.to_string()); }
+        }
+    }
+    for d in &diagnoses {
+        if let Some(s) = d.as_str() {
+            let s = s.trim();
+            if !s.is_empty() { raw_terms.push(s.to_string()); }
+        }
     }
 
     // 2. Resolve to snomed_ids via Postgres dictionary + LLM normalization fallback
@@ -51,20 +82,41 @@ pub async fn build_grounded_context(
 
     // 3. Keyword dictionary sweep fallback if linker returned nothing
     if concept_ids.is_empty() {
-        tracing::info!("[PromptBuilder] Linker returned nothing. Running keyword sweep...");
-        let words: Vec<&str> = input_text
-            .split(|c: char| !c.is_alphanumeric())
-            .filter(|w| w.len() > 4)
+        tracing::warn!("[PromptBuilder] Linker returned nothing. Running filtered keyword sweep...");
+
+        // Fix 2: Stopword-filtered, deduped clinical keyword sweep
+        // Only pass terms that could plausibly be in the clinical dictionary.
+        const SWEEP_STOPWORDS: &[&str] = &[
+            "PATIENT", "HOSPITAL", "CERTIFIED", "LABORATORY", "GENDER",
+            "REPORTING", "RESULT", "NORMAL", "RANGE", "COUNT", "VOLUME",
+            "DOCUMENT", "INCLUDING", "EXAMINATION", "ANALYSIS", "UNNAMED",
+            "CELLS", "MILLION", "FLUID", "SMEAR", "DOCTOR", "REPORT",
+            "TOTAL", "LEVEL", "VALUE", "UNITS", "PATHOLOGY", "SAMPLE",
+            "PATIENT", "FEMALE", "MALE", "BLOOD", "URINE", "SERUM",
+        ];
+
+        let sweep_terms: Vec<String> = input_text
+            .split_whitespace()
+            .map(|s| s.trim_matches(|c: char| !c.is_alphanumeric()).to_string())
+            .filter(|s| s.len() >= 5)                                    // drop short tokens
+            .filter(|s| s.chars().all(|c| c.is_alphabetic()))           // drop numeric/unit tokens
+            .filter(|s| !SWEEP_STOPWORDS.contains(&s.to_uppercase().as_str()))  // drop clinical noise
+            .collect::<std::collections::HashSet<_>>()                   // dedup
+            .into_iter()
             .collect();
-        for word in words.iter().take(50) {
+
+        tracing::info!("[PromptBuilder] Keyword sweep: {} candidate terms after filtering", sweep_terms.len());
+
+        for word in sweep_terms.iter().take(20) {
             if let Ok(Some(entity)) = crate::clients::postgres::search_dictionary(&pg_pool, word).await {
                 let graph_id = entity.snomed_id
                     .as_deref()
                     .filter(|s| !s.is_empty())
-                    .unwrap_or_else(|| entity.concept_id.as_str())
+                    .unwrap_or(entity.concept_id.as_str())
                     .trim()
                     .to_string();
                 if !concept_ids.contains(&graph_id) {
+                    tracing::info!("[PromptBuilder] Sweep hit: '{}' → snomed_id='{}'", word, graph_id);
                     concept_ids.push(graph_id.clone());
                     id_to_name.insert(graph_id.clone(), entity.name.clone());
                     entity_names.push(entity.name.clone());

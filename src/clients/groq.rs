@@ -14,9 +14,21 @@ pub struct GroqClient {
 impl AgentClient for GroqClient {
     async fn extract_entities(&self, text: &str) -> Result<Value, Box<dyn Error + Send + Sync>> {
         let client = Client::new();
-        let prompt = format!(
-            "Extract all medications/drugs and diagnoses from the following text. Output strictly as JSON in this format: {{\"medications\": [\"drug1\"], \"diagnoses\": [\"diag1\"]}}. No other text.\n\nText: {}",
-            text
+
+        // HARDCODED NER SYSTEM PROMPT — must never reference adjudication schema
+        let system_msg = r#"You are a clinical Named Entity Recognition (NER) extractor.
+Your ONLY job is to find drug/medication names and clinical diagnosis names in the provided text.
+Return ONLY this exact JSON object, no markdown, no explanation:
+{"medications": ["drug_name_1", ...], "diagnoses": ["diagnosis_name_1", ...]}
+If none found, return: {"medications": [], "diagnoses": []}
+Do NOT return any other keys or schema."#;
+
+        let user_msg = format!("Extract clinical entities from this text:\n\n{}", text);
+
+        tracing::info!(
+            "┌── [Groq ▶ SEND] extract_entities ──────────────────────────\n│  model: {}\n│  input_len: {} chars\n└────────────────────────────────────────────────────────────",
+            &self.fast_model,
+            text.len()
         );
 
         let res = client
@@ -24,7 +36,10 @@ impl AgentClient for GroqClient {
             .header("Authorization", format!("Bearer {}", self.api_key))
             .json(&json!({
                 "model": &self.fast_model,
-                "messages": [{"role": "user", "content": prompt}],
+                "messages": [
+                    {"role": "system", "content": system_msg},
+                    {"role": "user",   "content": user_msg}
+                ],
                 "response_format": { "type": "json_object" },
                 "temperature": 0.0
             }))
@@ -32,11 +47,21 @@ impl AgentClient for GroqClient {
             .await?;
 
         let json_body: Value = res.json().await?;
+        if let Some(err) = json_body.get("error") {
+            return Err(format!("[Groq NER] API error: {}", err).into());
+        }
+
         let content = json_body["choices"][0]["message"]["content"]
             .as_str()
             .unwrap_or("{}");
 
-        Ok(serde_json::from_str(content)?)
+        tracing::info!(
+            "└── [Groq ◀ RECV] extract_entities ──────────────────────────\n│  Raw NER JSON: {}\n└────────────────────────────────────────────────────────────",
+            content
+        );
+
+        let parsed: Value = serde_json::from_str(content)?;
+        Ok(parsed)
     }
 
     async fn chat_with_context(
@@ -126,9 +151,13 @@ impl AgentClient for GroqClient {
             .await?;
 
         let json_body: Value = res.json().await?;
+        if let Some(err) = json_body.get("error") {
+            return Err(format!("[Groq normalize_terms] API error: {}", err).into());
+        }
         let content = json_body["choices"][0]["message"]["content"]
             .as_str()
             .unwrap_or("{}");
+        tracing::debug!("[Groq normalize_terms] Raw: {}", content);
 
         let map: std::collections::HashMap<String, String> = serde_json::from_str(content)?;
         Ok(map)
@@ -161,6 +190,9 @@ impl AgentClient for GroqClient {
             .await?;
 
         let json_body: Value = res.json().await?;
+        if let Some(err) = json_body.get("error") {
+            return Err(format!("[Groq adjudication] API error: {}", err).into());
+        }
         let content = json_body["choices"][0]["message"]["content"]
             .as_str()
             .unwrap_or("{}");

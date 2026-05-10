@@ -59,14 +59,14 @@ async fn async_main() {
 
     let main_llm = Arc::new(GroqClient {
         api_key: cfg.groq_api_key.clone(),
-        fast_model: "openai/gpt-oss-120b".to_string(),
-        heavy_model: "openai/gpt-oss-20b".to_string(),
+        fast_model: "compound-beta-mini".to_string(),
+        heavy_model: "compound-beta".to_string(),
     });
 
     let slm = Arc::new(GroqClient {
         api_key: cfg.groq_api_key.clone(),
-        fast_model: "openai/gpt-oss-20b".to_string(),
-        heavy_model: "openai/gpt-oss-120b".to_string(),
+        fast_model: "compound-beta-mini".to_string(),
+        heavy_model: "compound-beta".to_string(),
     });
 
     let shared_state = Arc::new(AppState {
@@ -188,6 +188,21 @@ async fn handle_chat(
 ) -> Result<String, String> {
     if payload.case_id.trim().is_empty() || payload.query.trim().is_empty() {
         return Err("case_id and query cannot be empty".to_string());
+    }
+
+    // Validate case exists before touching LLM stack
+    match clients::postgres::get_case(&state.pg_pool, &payload.case_id).await {
+        Ok(None) => {
+            return Err(format!(
+                "Case '{}' not found. Please ingest the case documents first via /api/ingest.",
+                payload.case_id
+            ));
+        }
+        Err(e) => {
+            tracing::error!("[Chat] DB error checking case existence: {}", e);
+            return Err("Database error validating case ID.".to_string());
+        }
+        Ok(Some(_)) => {} // proceed
     }
 
     let response = agent::chat::process_chat(
