@@ -25,6 +25,19 @@ const renderToggle = document.getElementById('renderToggle');
 const caseDetailsContent = document.getElementById('caseDetailsContent');
 const caseDetailsEmpty = document.getElementById('caseDetailsEmpty');
 const reportOutput = document.getElementById('reportOutput');
+const documentTextArea = document.getElementById('documentTextArea');
+
+// New Buttons
+const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+const loadOlderBtn = document.getElementById('loadOlderBtn');
+const loadOlderContainer = document.getElementById('loadOlderContainer');
+const readjudicateBtn = document.getElementById('readjudicateBtn');
+const deleteCaseBtn = document.getElementById('deleteCaseBtn');
+const updateTextBtn = document.getElementById('updateTextBtn');
+
+// State for pagination
+let oldestMessageId = null;
+let historyLoading = false;
 
 // Initialization
 window.onload = () => {
@@ -32,6 +45,7 @@ window.onload = () => {
     setupResizers();
     setupDragAndDrop();
     setupChatInput();
+    setupActionButtons();
     
     // Marked configuration
     marked.setOptions({
@@ -320,8 +334,18 @@ async function loadCaseDetails(caseId) {
 
         // Clear chat & hide empty state
         chatHistory.innerHTML = '';
+        if (loadOlderContainer) {
+            loadOlderContainer.classList.add('hidden');
+            chatHistory.appendChild(loadOlderContainer);
+        }
         if (emptyState) emptyState.remove();
         
+        // Populate document text
+        documentTextArea.value = caseData.document_text || "";
+
+        // Load History
+        await loadChatHistory(caseId);
+
         appendChat('System', `Case ${caseId} loaded. System armed and ready for interrogation.`, 'system');
 
     } catch (e) {
@@ -396,7 +420,155 @@ async function sendChatMessage() {
     }
 }
 
-function appendChat(sender, text, type, id = null) {
+async function loadChatHistory(caseId, beforeId = null) {
+    if (historyLoading) return;
+    historyLoading = true;
+    
+    console.log(`[History] Fetching history for case: ${caseId}, beforeId: ${beforeId}`);
+    
+    try {
+        let url = `/api/cases/${encodeURIComponent(caseId)}/history?limit=30`;
+        if (beforeId) url += `&before_id=${beforeId}`;
+        
+        const res = await fetch(url);
+        if (!res.ok) {
+            const errorText = await res.text();
+            throw new Error(`API Error: ${errorText}`);
+        }
+        const messages = await res.json();
+        console.log(`[History] Received ${messages.length} messages.`);
+        
+        if (!beforeId) {
+            // First load
+            oldestMessageId = null;
+        }
+
+        if (messages.length > 0) {
+            // Messages arrive oldest-first from API (ASC)
+            // due to sub-query reversal in postgres.rs
+            
+            // Track the oldest message for "Load More"
+            oldestMessageId = messages[0].id;
+            
+            // For UI display, we want them chronological (bottom is newest).
+            // Since they are already ASC, we just iterate.
+            messages.forEach(msg => {
+                appendChat(
+                    msg.role === 'user' ? 'You' : 'D3-Agent', 
+                    msg.content, 
+                    msg.role === 'assistant' ? 'agent' : 'user', 
+                    `msg-${msg.id}`,
+                    beforeId // prepend if loading older
+                );
+            });
+
+            // Show "Load More" if we got a full page
+            if (messages.length === 30) {
+                loadOlderContainer.classList.remove('hidden');
+            } else {
+                loadOlderContainer.classList.add('hidden');
+            }
+        } else {
+            if (!beforeId) {
+                // No messages at all
+                loadOlderContainer.classList.add('hidden');
+            }
+        }
+    } catch (e) {
+        console.error("Chat History Error:", e);
+        appendChat('System Error', `Failed to load conversation history: ${e.message}`, 'error');
+    } finally {
+        historyLoading = false;
+    }
+}
+
+function setupActionButtons() {
+    clearHistoryBtn.onclick = async () => {
+        const caseId = caseIdInput.value.trim();
+        if (!caseId) return;
+        if (!confirm("Wipe all chat history for this case?")) return;
+        
+        try {
+            const res = await fetch(`/api/cases/${caseId}/history`, { method: 'DELETE' });
+            if (res.ok) {
+                chatHistory.innerHTML = '';
+                chatHistory.appendChild(loadOlderContainer);
+                loadOlderContainer.classList.add('hidden');
+                appendChat('System', 'Chat history cleared.', 'system');
+            }
+        } catch(e) { alert(e.message); }
+    };
+
+    loadOlderBtn.onclick = () => {
+        const caseId = caseIdInput.value.trim();
+        if (caseId && oldestMessageId) {
+            loadChatHistory(caseId, oldestMessageId);
+        }
+    };
+
+    deleteCaseBtn.onclick = async () => {
+        const caseId = caseIdInput.value.trim();
+        if (!caseId) return;
+        if (!confirm(`Permanently DELETE case ${caseId} and all associated data?`)) return;
+        
+        try {
+            const res = await fetch(`/api/cases/${caseId}`, { method: 'DELETE' });
+            if (res.ok) {
+                window.location.reload();
+            }
+        } catch(e) { alert(e.message); }
+    };
+
+    readjudicateBtn.onclick = async () => {
+        const caseId = caseIdInput.value.trim();
+        if (!caseId) return;
+        
+        readjudicateBtn.disabled = true;
+        const originalText = readjudicateBtn.innerHTML;
+        readjudicateBtn.innerHTML = 'Processing...';
+        
+        try {
+            const res = await fetch(`/api/cases/${caseId}/readjudicate`, { method: 'POST' });
+            if (!res.ok) throw new Error(await res.text());
+            await loadCaseDetails(caseId);
+            appendChat('System', 'Readjudication complete.', 'system');
+        } catch(e) { alert(e.message); }
+        finally {
+            readjudicateBtn.disabled = false;
+            readjudicateBtn.innerHTML = originalText;
+        }
+    };
+
+    updateTextBtn.onclick = async () => {
+        const caseId = caseIdInput.value.trim();
+        if (!caseId) return;
+        
+        try {
+            const res = await fetch(`/api/cases/${caseId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ document_text: documentTextArea.value })
+            });
+            if (res.ok) {
+                appendChat('System', 'Document text updated.', 'system');
+            } else {
+                throw new Error(await res.text());
+            }
+        } catch(e) { alert(e.message); }
+    };
+}
+
+async function deleteMessage(msgId) {
+    if (!confirm("Delete this message?")) return;
+    try {
+        const res = await fetch(`/api/messages/${msgId}`, { method: 'DELETE' });
+        if (res.ok) {
+            document.getElementById(`msg-${msgId}`).remove();
+        }
+    } catch(e) { alert(e.message); }
+}
+
+function appendChat(sender, text, type, id = null, prepend = false) {
     const msgDiv = document.createElement('div');
     if (id) msgDiv.id = id;
     
@@ -437,13 +609,37 @@ function appendChat(sender, text, type, id = null) {
 
     const senderHtml = type !== 'system' && type !== 'typing' ? `<span class="text-xs font-bold text-gray-500 mb-1 px-1 ${type === 'user' ? 'text-right' : 'text-left'}">${sender}</span>` : '';
 
-    msgDiv.className = wrapperClasses;
+    msgDiv.className = wrapperClasses + ' group/msg'; // Add group for hover effects
+    
+    let deleteBtn = '';
+    if (id && id.startsWith('msg-') && type !== 'system') {
+        const rawId = id.replace('msg-', '');
+        deleteBtn = `
+            <button onclick="deleteMessage(${rawId})" class="opacity-0 group-hover/msg:opacity-100 text-[10px] text-gray-600 hover:text-red-500 transition-opacity ml-2 self-center">
+                Delete
+            </button>
+        `;
+    }
+
     msgDiv.innerHTML = `
         ${senderHtml}
-        <div class="${bubbleClasses}">${contentHtml}</div>
+        <div class="flex items-center">
+            <div class="${bubbleClasses}">${contentHtml}</div>
+            ${type === 'agent' ? deleteBtn : ''}
+            ${type === 'user' ? `<div class="order-first mr-2">${deleteBtn}</div>` : ''}
+        </div>
     `;
 
-    chatHistory.appendChild(msgDiv);
+    if (prepend) {
+        // Insert after the loadOlderContainer
+        if (loadOlderContainer.nextSibling) {
+            chatHistory.insertBefore(msgDiv, loadOlderContainer.nextSibling);
+        } else {
+            chatHistory.appendChild(msgDiv);
+        }
+    } else {
+        chatHistory.appendChild(msgDiv);
+    }
     
     // Add copy buttons to code blocks if rendered as markdown
     if (isMarkdown) {
@@ -462,7 +658,9 @@ function appendChat(sender, text, type, id = null) {
         });
     }
 
-    chatHistory.scrollTop = chatHistory.scrollHeight;
+    if (!prepend) {
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+    }
 }
 
 // Handle toggle rendering retroactively (optional, but good UX)

@@ -296,7 +296,7 @@ pub async fn build_grounded_context(
     // 6. Semantic context from Qdrant global knowledge base
     let qdrant_context = if !entity_names.is_empty() {
         let global_query = format!("Medical facts regarding: {}", entity_names.join(", "));
-        match qdrant::search_global_knowledge(qdrant_url, embedding_url, &global_query, 10).await {
+        match qdrant::search_global_knowledge(qdrant_url, embedding_url, &global_query, 15).await {
             Ok(ctx) => ctx,
             Err(e) => {
                 tracing::error!("Qdrant global search failed: {}", e);

@@ -268,3 +268,174 @@ pub async fn list_cases(
 
     Ok(summaries)
 }
+
+/// Delete a case by ID. Returns true if the row existed and was deleted.
+/// The ON DELETE CASCADE on chat_messages will wipe all history automatically.
+pub async fn delete_case(
+    pool: &Pool,
+    case_id: &str,
+) -> Result<bool, Box<dyn Error + Send + Sync>> {
+    let client = pool.get().await?;
+    tracing::info!(
+        "┌── [Postgres ▶ SEND] delete_case ───────────────────────────\n│  case_id: {}\n└────────────────────────────────────────────────────────────",
+        case_id
+    );
+    let n = client
+        .execute("DELETE FROM cases WHERE case_id = $1", &[&case_id])
+        .await?;
+    tracing::info!(
+        "└── [Postgres ◀ RECV] delete_case ───────────────────────────\n│  rows_deleted={}\n└────────────────────────────────────────────────────────────",
+        n
+    );
+    Ok(n > 0)
+}
+
+/// Overwrite the document_text of an existing case (does NOT re-adjudicate).
+pub async fn update_case_text(
+    pool: &Pool,
+    case_id: &str,
+    document_text: &str,
+) -> Result<bool, Box<dyn Error + Send + Sync>> {
+    let client = pool.get().await?;
+    tracing::info!(
+        "┌── [Postgres ▶ SEND] update_case_text ──────────────────────\n│  case_id: {}  text_len={}\n└────────────────────────────────────────────────────────────",
+        case_id,
+        document_text.len()
+    );
+    let n = client
+        .execute(
+            "UPDATE cases SET document_text = $1 WHERE case_id = $2",
+            &[&document_text, &case_id],
+        )
+        .await?;
+    tracing::info!(
+        "└── [Postgres ◀ RECV] update_case_text ──────────────────────\n│  rows_affected={}\n└────────────────────────────────────────────────────────────",
+        n
+    );
+    Ok(n > 0)
+}
+
+// ── Chat History ──────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ChatMessage {
+    pub id:         i64,
+    pub case_id:    String,
+    pub role:       String,   // "user" | "assistant"
+    pub content:    String,
+    pub created_at: String,
+}
+
+/// Append a single message turn to chat_messages. Returns the new row ID.
+pub async fn append_chat_message(
+    pool: &Pool,
+    case_id: &str,
+    role: &str,
+    content: &str,
+) -> Result<i64, Box<dyn Error + Send + Sync>> {
+    tracing::debug!("[Postgres] append_chat_message: getting connection from pool...");
+    let client = pool.get().await?;
+    tracing::debug!("[Postgres] append_chat_message: acquired connection. Running INSERT (content_len={})...", content.len());
+    let row = client
+        .query_one(
+            "INSERT INTO chat_messages (case_id, role, content)
+             VALUES ($1, $2, $3)
+             RETURNING id",
+            &[&case_id, &role, &content],
+        )
+        .await?;
+    let id: i64 = row.get("id");
+    tracing::info!("[Chat] Logged {} turn id={} for case '{}'", role, id, case_id);
+    Ok(id)
+}
+
+/// Fetch messages for a case.
+///
+/// Pagination (cursor-based):
+///   - `limit`     — max rows to return (clamped to 1–200, default 50)
+///   - `before_id` — if Some(n), only return messages with id < n (load older)
+///
+/// Always returns rows in ascending `created_at` order (oldest-first) so the
+/// caller can render a natural conversation flow.
+pub async fn get_chat_history(
+    pool: &Pool,
+    case_id: &str,
+    limit: Option<i64>,
+    before_id: Option<i64>,
+) -> Result<Vec<ChatMessage>, Box<dyn Error + Send + Sync>> {
+    let client = pool.get().await?;
+    let lim = limit.unwrap_or(50).clamp(1, 200);
+
+    let rows = match before_id {
+        Some(bid) => {
+            // Cursor path: fetch `lim` rows before the cursor, then re-sort ascending
+            client
+                .query(
+                    "SELECT id, case_id, role, content,
+                            to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS created_at
+                     FROM (
+                         SELECT * FROM chat_messages
+                         WHERE case_id = $1 AND id < $2
+                         ORDER BY id DESC
+                         LIMIT $3
+                     ) sub
+                     ORDER BY id ASC",
+                    &[&case_id, &bid, &lim],
+                )
+                .await?
+        }
+        None => {
+            // Initial load: most-recent `lim` messages, returned oldest-first
+            client
+                .query(
+                    "SELECT id, case_id, role, content,
+                            to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS created_at
+                     FROM (
+                         SELECT * FROM chat_messages
+                         WHERE case_id = $1
+                         ORDER BY id DESC
+                         LIMIT $2
+                     ) sub
+                     ORDER BY id ASC",
+                    &[&case_id, &lim],
+                )
+                .await?
+        }
+    };
+
+    Ok(rows
+        .iter()
+        .map(|r| ChatMessage {
+            id:         r.get("id"),
+            case_id:    r.get("case_id"),
+            role:       r.get("role"),
+            content:    r.get("content"),
+            created_at: r.get("created_at"),
+        })
+        .collect())
+}
+
+/// Delete a single message by its numeric ID. Returns true if a row was deleted.
+pub async fn delete_chat_message(
+    pool: &Pool,
+    id: i64,
+) -> Result<bool, Box<dyn Error + Send + Sync>> {
+    let client = pool.get().await?;
+    let n = client
+        .execute("DELETE FROM chat_messages WHERE id = $1", &[&id])
+        .await?;
+    Ok(n > 0)
+}
+
+/// Delete ALL messages for a case. Returns the count of deleted rows.
+pub async fn clear_chat_history(
+    pool: &Pool,
+    case_id: &str,
+) -> Result<u64, Box<dyn Error + Send + Sync>> {
+    let client = pool.get().await?;
+    let n = client
+        .execute("DELETE FROM chat_messages WHERE case_id = $1", &[&case_id])
+        .await?;
+    tracing::info!("[Chat] Cleared {} message(s) for case '{}'", n, case_id);
+    Ok(n)
+}

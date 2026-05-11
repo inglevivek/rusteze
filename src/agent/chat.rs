@@ -30,7 +30,7 @@ pub async fn process_chat(
     let case_id = &case.case_id;
     tracing::info!("[Chat] Searching context for Case ID: {}", case_id);
 
-    let case_context = match qdrant::search_case_context(&config.qdrant_url, &config.embedding_url, &query, &case_id, 5).await {
+    let case_context = match qdrant::search_case_context(&config.qdrant_url, &config.embedding_url, &query, &case_id, 15).await {
         Ok(ctx) => ctx,
         Err(e) => {
             tracing::error!("Qdrant search failed: {}", e);

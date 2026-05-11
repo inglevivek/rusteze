@@ -1,0 +1,25 @@
+Course Summary
+A 42-year-old female patient presented for emergency admission on 06 April 2026 at 22:10. The clinical history was notable for a recent hospitalization for enterocolitis in March 2026, with no other major past illnesses. At the presentation, the patient reported 15–20 episodes of loose watery stools starting that morning, persistent vomiting (7–8 times), abdominal pain, and severe generalized weakness. Physical examination on arrival revealed cold extremities, severe dehydration (Grade ++), and a blood pressure of 80/60 mmHg, indicating hypotensive shock.
+
+Inpatient management was immediately initiated with aggressive intravenous fluid resuscitation (Normal Saline and Ringer's Lactate at 120 ml/hr) and broad-spectrum IV antibiotics, including Inj. Mocef (2gm BD) and Inj. Metrogyl. Diagnostic evaluations included laboratory tests and imaging to determine the underlying cause and severity. Results showed a total WBC count of 10100/cumm, normal serum creatinine of 0.6 mg/dL, and random blood sugar of 98 mg/dL. Specialist immunology tests for ANA and HIV were negative. USG findings were suggestive of enteritis, colitis, and gastritis.
+
+The patient responded rapidly to the clinical interventions. By 05:30 on 07 April 2026, her blood pressure had stabilized to 120/80 mmHg, and her pulse was 84/min. A gastroenterology consultation was sought due to the recurrence of symptoms (two episodes in one month), with recommendations for specialized diagnostic procedures if symptoms persisted. The patient remained hemodynamically stable and was discharged on 08 April 2026 with no active complaints. Post-discharge care included oral medications (Tab Oflox OZ, Tab Pantocid DSR, Tab Pregalin M, and Tab Sporolac DS) and advice to follow a normal home diet while strictly avoiding fried, fatty, or outside food.
+
+Key Decisions:
+Decision: In-patient Hospitalization.
+
+Reason: Severe dehydration and hemodynamic instability (hypotension) requiring intensive monitoring and IV therapy.
+
+Evidence: [{"doc_id": "Discharge_Summary.pdf", "page": 1, "extract": "BP 80/60 MMHG... I/E- DEHYDRATION ++"}]
+
+Decision: Aggressive IV Fluid Resuscitation and Antibiotics.
+
+Reason: Immediate clinical need to stabilize blood pressure and manage suspected infectious enterocolitis.
+
+Evidence: [{"doc_id": "IPD papers.pdf", "page": 8, "extract": "INJ MOCEF (2GM) IV BD INJ METROGYL (100) IV TDS"}]
+
+Decision: Specialist Gastroenterology Consultation.
+
+Reason: Recurrence of enterocolitis symptoms within a single month.
+
+Evidence: [{"doc_id": "IPD papers.pdf", "page": 2, "extract": "Repeated AGE 2 episode in a month"}]

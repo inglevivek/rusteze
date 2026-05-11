@@ -283,13 +283,13 @@ pub async fn count_collection_points(
     qdrant_url: &str,
     collection_name: &str,
 ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
-    let client = reqwest::Client::new();
-    let url = format!("{}/collections/{}", qdrant_url, collection_name);
-    let resp: serde_json::Value = client.get(&url).send().await?.json().await?;
-    let count = resp
-        .pointer("/result/points_count")
-        .and_then(|v| v.as_u64())
+    let client = Qdrant::from_url(qdrant_url).build()?;
+    let resp = client.collection_info(collection_name).await?;
+    
+    let count = resp.result
+        .and_then(|r| r.points_count)
         .unwrap_or(0);
+
     tracing::info!(
         "[Qdrant] collection='{}' has {} points indexed",
         collection_name, count

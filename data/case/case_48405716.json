@@ -1,0 +1,619 @@
+{
+  "case_id": "48405716",
+  "clinical_summary": {
+    "course_summary": "The patient is a 25-year-old male with a medical history of obesity. He presented to the hospital with a three-day history of high-grade fever with chills, severe headache, nausea, right hypochondriac pain, and generalized weakness. Previous outpatient treatment from a general practitioner on 06/01/2026 failed to relieve these symptoms. Upon admission on 09/01/2026, clinical assessment revealed severe hypotension (BP 90/50 mmHg), tachycardia (104/min), and dehydration. Diagnostic investigations confirmed Typhoid fever through positive IgG and IgM antibodies. Laboratory results showed systemic inflammation and hepatic involvement, with an initial CRP of 275 and elevated liver enzymes (SGOT 56, SGPT 88). The CRP levels peaked at 299 on 10/01/2026. Treatment consisted of intravenous fluids, antibiotics (Inj. Cefotroy SB Forte), proton pump inhibitors, and antiemetics. Recurrent high-grade fever spikes were managed with Inj. Neomol, with a maximum recorded temperature of 103.2°F. During the four-day hospitalization, vitals trended toward stabilization. By 13/01/2026, the patient’s blood pressure improved to 120/80 mmHg, and the CRP level reduced significantly to 48. The patient was discharged in a vitally and hemodynamically stable condition. Post-discharge care instructions included physical rest, a healthy diet, and a five-day course of oral medications: Tab. Pexime (200mg), Tab. Calpol (650mg), and Tab. N B D3. A follow-up assessment was advised after 5 days."
+  },
+  "key_decision_points": [
+    {
+      "decision": "In-patient Admission",
+      "reason": "Presence of Typhoid fever with significantly raised CRP and severe hypotension (BP 90/50) indicated a poor prognosis if left untreated.",
+      "evidence": [
+        {
+          "doc_id": "Doctor_Letter.pdf",
+          "page": 1,
+          "extract": "found that Pt.(patient) suffered from Typhoid fever with Increased CRP and severe Hypotension. It not treated above mentioned Condition. the prognosis is very poor. so I advised her family to Admission in ward."
+        }
+      ]
+    },
+    {
+      "decision": "Administration of Intravenous Antibiotics and Fluids",
+      "reason": "Required for the medical management of confirmed Typhoid infection and associated dehydration/hypotension.",
+      "evidence": [
+        {
+          "doc_id": "Discharge_Summary.pdf",
+          "page": 1,
+          "extract": "ON ADMISSION PATIENT ADMITTED IN WARD... HER BLOOD IX WERE DONE AND RX STARTED ACCORDINGLY."
+        }
+      ]
+    },
+    {
+      "decision": "Supplemental Antipyretic Administration",
+      "reason": "Management of documented high-grade fever spikes reaching 103.2F and 102.6F despite ongoing treatment.",
+      "evidence": [
+        {
+          "doc_id": "Indoor Case Paper.pdf",
+          "page": 2,
+          "extract": "12 MN :- Temp : 103.2F give inj. Neomol"
+        },
+        {
+          "doc_id": "Indoor Case Paper.pdf",
+          "page": 4,
+          "extract": "12 MN :- Temp : 102.6F give Inj. Neomol"
+        }
+      ]
+    },
+    {
+      "decision": "Hospital Discharge",
+      "reason": "Achievement of clinical stability and significant downward trend in inflammatory markers (CRP reduction from 299 to 48).",
+      "evidence": [
+        {
+          "doc_id": "Discharge_Summary.pdf",
+          "page": 1,
+          "extract": "ON 12/01/26 HER BLOOD IX WERE S/O:-CRP DECREASED THAN BEFORE... PT VITALLY AND HEAMODYNAMICALLY STABLE HANCE BEEN DISCHARGED."
+        }
+      ]
+    }
+  ],
+  "treatment_report": {
+    "title": "Chronological Course of Treatment Report",
+    "meta": {
+      "case_id": "48405716",
+      "generated_by": "Medical Consultant Extraction Agent",
+      "report_date_iso": "2026-05-10"
+    },
+    "patient_overview": {
+      "name": "DHRUV DILESHBHAI JIVANI",
+      "age": 25,
+      "sex": "MALE",
+      "mrn": null
+    },
+    "encounter": {
+      "hospital": "PARSHWA HOSPITAL",
+      "admission_date": "2026-01-09",
+      "discharge_date": "2026-01-13",
+      "primary_diagnosis": "TYPHOID FEVER",
+      "icd10": null
+    },
+    "timeline": [
+      {
+        "date": "2026-01-06",
+        "time": null,
+        "event_type": "Presentation",
+        "summary": "Patient sought outpatient treatment for fever and abdominal pain.",
+        "details": {
+          "vitals": null,
+          "labs": null,
+          "imaging": null,
+          "medications": "medicine from General Practitioner",
+          "procedures": null,
+          "results": "NOT relieved and complain increased"
+        },
+        "evidence": [
+          {
+            "doc_id": "Doctor_Letter.pdf",
+            "page": 1,
+            "extract": "suffered from Fever, weakness. Abd. Pain At Rt. Hypochondriac region and Nausea. Before Admission on date 6-1-2026 he also taken medicine from General Practitioner. But NOT relieved and complain increased"
+          }
+        ]
+      },
+      {
+        "date": "2026-01-09",
+        "time": "10:00 AM",
+        "event_type": "Presentation",
+        "summary": "Admission to Parshwa Hospital with high-grade fever and severe hypotension.",
+        "details": {
+          "vitals": {
+            "pulse": {
+              "value": 104,
+              "unit": "/MIN"
+            },
+            "blood_pressure": {
+              "systolic": 90,
+              "diastolic": 50,
+              "unit": "MMHG"
+            },
+            "temperature": {
+              "value": 100.2,
+              "unit": "F"
+            },
+            "spo2": {
+              "value": 98,
+              "unit": "%"
+            }
+          },
+          "labs": "Adv Tim :- C.B.C., C.R.P., Widal",
+          "imaging": null,
+          "medications": "Inj. Neomol (IVP)",
+          "procedures": null,
+          "results": "mild tender in Rt. Hypochondriacal region"
+        },
+        "evidence": [
+          {
+            "doc_id": "Discharge_Summary.pdf",
+            "page": 1,
+            "extract": "D.O.A &TIME:- 09/01/26 AT 10:00 AM ... BP-90/50 MMHG, PULSE:- 104/MIN, TEMP:-100.2F, SPO2:- 98%"
+          },
+          {
+            "doc_id": "Indoor Case Paper.pdf",
+            "page": 2,
+            "extract": "P/A :- mild tender in Rt. Hypochondriacal region ... 10 AM :- Temp: 100.2F give IVP Inj. Neomol"
+          }
+        ]
+      },
+      {
+        "date": "2026-01-09",
+        "time": null,
+        "event_type": "Investigation",
+        "summary": "Initial lab investigations confirming Typhoid fever and elevated inflammatory markers.",
+        "details": {
+          "vitals": null,
+          "labs": "Hb 10.0, WBC 11000, CRP 275, SGOT 56, SGPT 88, Typhoid Antibody IgG/IgM Positive.",
+          "imaging": null,
+          "medications": null,
+          "procedures": "Blood test",
+          "results": "raised CRP LEVEL WITH TYPHOD FEVER"
+        },
+        "evidence": [
+          {
+            "doc_id": "Discharge_Summary.pdf",
+            "page": 1,
+            "extract": "HER BLOOD IX WERE S/O:- RAISED CRP LEVEL WITH TYPHOD FEVER"
+          },
+          {
+            "doc_id": "Reports.pdf",
+            "page": 1,
+            "extract": "CRP 275"
+          },
+          {
+            "doc_id": "Reports.pdf",
+            "page": 2,
+            "extract": "TYPHOID ANTIBODY IgG POSITIVE ... IgM POSITIVE"
+          }
+        ]
+      },
+      {
+        "date": "2026-01-09",
+        "time": "12:00 MN",
+        "event_type": "Monitoring",
+        "summary": "Clinical note recording high-grade fever spike at midnight managed with antipyretics.",
+        "details": {
+          "vitals": {
+            "temperature": {
+              "value": 103.2,
+              "unit": "F"
+            }
+          },
+          "labs": null,
+          "imaging": null,
+          "medications": "Inj. Neomol",
+          "procedures": null,
+          "results": null
+        },
+        "evidence": [
+          {
+            "doc_id": "Indoor Case Paper.pdf",
+            "page": 2,
+            "extract": "12 MN :- Temp: 103.2F give inj. Neomol"
+          }
+        ]
+      },
+      {
+        "date": "2026-01-10",
+        "time": "10:00 AM",
+        "event_type": "Assessment",
+        "summary": "Clinical assessment shows persistent mild tenderness in abdomen.",
+        "details": {
+          "vitals": {
+            "blood_pressure": {
+              "systolic": 102,
+              "diastolic": 82,
+              "unit": "mmHg"
+            }
+          },
+          "labs": "Adv Tim:- C.B.C, C.R.P, SGOT, SGPT, Blood U-R",
+          "imaging": null,
+          "medications": null,
+          "procedures": null,
+          "results": "P.A : mild Tenderness"
+        },
+        "evidence": [
+          {
+            "doc_id": "Indoor Case Paper.pdf",
+            "page": 4,
+            "extract": "B.P : 102/82 mmHg; P.A : mild Tenderness"
+          }
+        ]
+      },
+      {
+        "date": "2026-01-10",
+        "time": null,
+        "event_type": "Investigation",
+        "summary": "Follow-up lab assessment showing peak CRP levels.",
+        "details": {
+          "vitals": null,
+          "labs": "CRP 299, Hb 10.3, WBC 11500.",
+          "imaging": null,
+          "medications": null,
+          "procedures": null,
+          "results": "increased CRP"
+        },
+        "evidence": [
+          {
+            "doc_id": "Discharge_Summary.pdf",
+            "page": 1,
+            "extract": "ON 10/01/26 HER BLOOD IX WERE S/O :- INCREASED CRP"
+          },
+          {
+            "doc_id": "Reports.pdf",
+            "page": 6,
+            "extract": "CRP 299"
+          }
+        ]
+      },
+      {
+        "date": "2026-01-11",
+        "time": null,
+        "event_type": "Investigation",
+        "summary": "Laboratory monitoring showing initial reduction in inflammatory markers and liver enzymes.",
+        "details": {
+          "vitals": null,
+          "labs": "CRP 250, SGOT 40, SGPT 68, Hb 11.3, WBC 9800.",
+          "imaging": null,
+          "medications": null,
+          "procedures": null,
+          "results": "SGOT, SGPT DECREASED AND CRP ALSO DECREASED"
+        },
+        "evidence": [
+          {
+            "doc_id": "Discharge_Summary.pdf",
+            "page": 1,
+            "extract": "ON 11/01/26 HER BLOOD IX WERE S/O:-SGOT ,SGPT DECREASED AND CRP ALSO DECREASED"
+          },
+          {
+            "doc_id": "Reports.pdf",
+            "page": 9,
+            "extract": "CRP 250"
+          }
+        ]
+      },
+      {
+        "date": "2026-01-11",
+        "time": "08:00 PM",
+        "event_type": "Monitoring",
+        "summary": "Monitoring entry for persistent fever spike management.",
+        "details": {
+          "vitals": {
+            "temperature": {
+              "value": 102.3,
+              "unit": "F"
+            }
+          },
+          "labs": null,
+          "imaging": null,
+          "medications": "Inj. Neomol",
+          "procedures": null,
+          "results": null
+        },
+        "evidence": [
+          {
+            "doc_id": "Indoor Case Paper.pdf",
+            "page": 6,
+            "extract": "8 PM = Temp - 102.3 give Inj. Neomol"
+          }
+        ]
+      },
+      {
+        "date": "2026-01-12",
+        "time": null,
+        "event_type": "Investigation",
+        "summary": "Lab monitoring recording significant downward trend in CRP.",
+        "details": {
+          "vitals": null,
+          "labs": "CRP 176",
+          "imaging": null,
+          "medications": null,
+          "procedures": null,
+          "results": "CRP DECREASED THAN BEFORE"
+        },
+        "evidence": [
+          {
+            "doc_id": "Discharge_Summary.pdf",
+            "page": 1,
+            "extract": "ON 12/01/26 HER BLOOD IX WERE S/O:-CRP DECREASED THAN BEFORE"
+          },
+          {
+            "doc_id": "Reports.pdf",
+            "page": 11,
+            "extract": "CRP 176"
+          }
+        ]
+      },
+      {
+        "date": "2026-01-13",
+        "time": "06:00 PM",
+        "event_type": "Assessment",
+        "summary": "Clinical stability confirmed by bedside assessment prior to discharge.",
+        "details": {
+          "vitals": {
+            "pulse": {
+              "value": 80,
+              "unit": "/min"
+            },
+            "blood_pressure": {
+              "systolic": 110,
+              "diastolic": 80,
+              "unit": "mmHg"
+            },
+            "temperature": {
+              "value": 98.4,
+              "unit": "F"
+            }
+          },
+          "labs": null,
+          "imaging": null,
+          "medications": null,
+          "procedures": null,
+          "results": "NO other comorbidity; Adv Discharge"
+        },
+        "evidence": [
+          {
+            "doc_id": "Indoor Case Paper.pdf",
+            "page": 10,
+            "extract": "S/B Dr. Parshwa A. Shah (6 PM); NO other comorbidity; B.P = 110 / 80 P = 80 / min T 98.4F; Adv Discharge"
+          }
+        ]
+      },
+      {
+        "date": "2026-01-13",
+        "time": "08:00 PM",
+        "event_type": "Disposition",
+        "summary": "Patient discharged in stable condition.",
+        "details": {
+          "vitals": {
+            "pulse": {
+              "value": 85,
+              "unit": "/MIN"
+            },
+            "blood_pressure": {
+              "systolic": 120,
+              "diastolic": 80,
+              "unit": "MMHG"
+            },
+            "temperature": {
+              "value": 96.8,
+              "unit": "F"
+            },
+            "spo2": {
+              "value": 98,
+              "unit": "%"
+            }
+          },
+          "labs": "Hb 12.9, WBC 7400, Platelet 298, SGOT 35.5, SGPT 62.8, CRP 48.",
+          "imaging": null,
+          "medications": "TAB.PEXIME, TAB CSLPOL, TAB.N B D3",
+          "procedures": null,
+          "results": "PT VITALLY AND HEAMODYNAMICALLY STABLE"
+        },
+        "evidence": [
+          {
+            "doc_id": "Discharge_Summary.pdf",
+            "page": 1,
+            "extract": "D.O.D & TIME:-13/01/26 AT 08:00 PM ... PT VITALLY AND HEAMODYNAMICALLY STABLE HANCE BEEN DISCHARGED."
+          },
+          {
+            "doc_id": "Reports.pdf",
+            "page": 13,
+            "extract": "CRP 48"
+          }
+        ]
+      }
+    ],
+    "course_summary": {
+      "concise_rationale": "The 25-year-old patient presented with a 3-day history of high-grade fever, weakness, and abdominal pain. Clinical findings including severe hypotension (BP 90/50) and laboratory confirmation of Typhoid fever with significantly raised inflammatory markers necessitated inpatient management.",
+      "key_decisions": [
+        {
+          "decision": "Inpatient Hospitalization",
+          "reason": "Presence of significantly raised CRP and severe hypotension indicating poor prognosis if untreated.",
+          "evidence": [
+            {
+              "doc_id": "Doctor_Letter.pdf",
+              "page": 1,
+              "extract": "found that Pt.(patient) suffered from Typhoid fever with Increased CRP and severe Hypotension. It not treated above mentioned Condition. the prognosis is very poor. so I advised her family to Admission in ward."
+            }
+          ]
+        },
+        {
+          "decision": "Administration of IV Antibiotics and Antipyretics",
+          "reason": "Management of confirmed Typhoid infection and high-grade fever spikes recorded up to 103.2*F.",
+          "evidence": [
+            {
+              "doc_id": "Discharge_Summary.pdf",
+              "page": 1,
+              "extract": "IN VIEW OF HIGHGRADE FEVERE ANTIPYRATE GIVEN ... HER BLOOD IX WERE DONE AND RX STARTED ACCORDINGLY."
+            }
+          ]
+        }
+      ]
+    },
+    "discharge_plan": {
+      "diagnoses": [
+        "TYPHOID FEVER"
+      ],
+      "medications": [
+        "TAB.PEXIME 200 MG (1-0-1) for 5 DAYS",
+        "TAB CSLPOL 650MG (1-0-1) for 5 DAYS",
+        "TAB.N B D3 (1-0-1) for 5 DAYS"
+      ],
+      "follow_up": "AFTER 5 DAYS",
+      "outcome": "PT VITALLY AND HEAMODYNAMICALLY STABLE"
+    },
+    "data_quality": {
+      "missing_fields": [
+        "Patient Medical Record Number (MRN)",
+        "ICD10 Diagnosis Code"
+      ],
+      "notes": "Laboratory reporting dates in the sources are listed as YY/MM/DD (e.g., 09/01/26) corresponding to January 2026. Meta-data Case ID was obtained from Claim Number 48405716 in the rejection letter."
+    }
+  },
+  "ipd_paper_ocr": [
+    {
+      "date": "09/01/26",
+      "nursing_chart": {
+        "medications": [
+          "Inj. SB Forte 3gm + 100ml NS (Administered at 10 AM, 10 PM)",
+          "Inj. Pantozem IV (Administered at 10 AM, 10 PM)",
+          "Inj pronden (Administered at 10 AM, 10 PM)",
+          "Inj. cefotroy (Administered at 10 AM, 10 PM)",
+          "Inj ns / dns @ 80ml / hr"
+        ],
+        "monitoring": [
+          { "time": "10 AM", "temp": 100.2, "pulse": 105, "bp": "90/50", "spo2": 98 },
+          { "time": "12 MD", "temp": 99.0, "pulse": 95, "bp": "96/60", "spo2": 98 },
+          { "time": "2 PM", "temp": 98.6, "pulse": 92, "bp": "92/70", "spo2": 97 },
+          { "time": "4 PM", "temp": 100.6, "pulse": 98, "bp": "94/72", "spo2": 98 },
+          { "time": "6 PM", "temp": 99.3, "pulse": 108, "bp": "98/76", "spo2": 99 },
+          { "time": "8 PM", "temp": 99.0, "pulse": 92, "bp": "95/80", "spo2": 98 },
+          { "time": "10 PM", "temp": 99.2, "pulse": 93, "bp": "98/78", "spo2": 99 },
+          { "time": "12 MN", "temp": 103.2, "pulse": 102, "bp": "92/76", "spo2": 97 },
+          { "time": "2 AM", "temp": 99.6, "pulse": 92, "bp": "93/78", "spo2": 99 },
+          { "time": "4 AM", "temp": 100.0, "pulse": 101, "bp": "98/80", "spo2": 99 },
+          { "time": "6 AM", "temp": 99.0, "pulse": 96, "bp": "95/80", "spo2": 98 },
+          { "time": "8 AM", "temp": 98.0, "pulse": 90, "bp": "92/76", "spo2": 97 }
+        ]
+      },
+      "clinical_notes": [
+        "S/B Dr. Parshwa A. Shah",
+        "NO P/C",
+        "B.P. = 90/50",
+        "P/A :- mild tender in Rt. Hypochondriacal region",
+        "Adv Tim :- C.B.C., C.R.P., Widal",
+        "10 AM :- Temp: 100.2*F give IVP Inj. Neomol",
+        "6 PM :- Temp: 100.6*F give Inj Neomol",
+        "12 MN :- Temp: 103.2*F give inj. Neomol"
+      ]
+    },
+    {
+      "date": "10/01/26",
+      "nursing_chart": {
+        "medications": [
+          "Inj. Cefotroy SB forte 3gm + 100cc NS IV BD (Administered at 10 AM, 10 PM)",
+          "Inj. Pantozem (Administered at 8 AM, 8 PM)",
+          "Inj. Pronden (Administered at 8 AM, 8 PM)",
+          "Inj. NS / DNS @ 80ml / hr"
+        ],
+        "monitoring": [
+          { "time": "10 AM", "temp": 98.6, "pulse": 93, "bp": "102/82", "spo2": 98 },
+          { "time": "12 MD", "temp": 98.8, "pulse": 97, "bp": "102/84", "spo2": 99 },
+          { "time": "2 PM", "temp": 100.6, "pulse": 108, "bp": "98/80", "spo2": 99 },
+          { "time": "4 PM", "temp": 97.0, "pulse": 90, "bp": "99/74", "spo2": 97 },
+          { "time": "6 PM", "temp": 98.2, "pulse": 86, "bp": "99/80", "spo2": 99 },
+          { "time": "8 PM", "temp": 98.6, "pulse": 88, "bp": "100/80", "spo2": 98 },
+          { "time": "10 PM", "temp": 99.2, "pulse": 89, "bp": "102/82", "spo2": 99 },
+          { "time": "12 MN", "temp": 102.6, "pulse": 106, "bp": "106/86", "spo2": 98 },
+          { "time": "2 AM", "temp": 97.0, "pulse": 93, "bp": "104/86", "spo2": 99 },
+          { "time": "4 AM", "temp": 96.8, "pulse": 87, "bp": "108/80", "spo2": 97 },
+          { "time": "6 AM", "temp": 97.3, "pulse": 86, "bp": "106/86", "spo2": 98 },
+          { "time": "8 AM", "temp": 97.2, "pulse": 85, "bp": "102/86", "spo2": 96 }
+        ]
+      },
+      "clinical_notes": [
+        "S/B Dr. Parshwa A Shah (10 AM); NO comorbidity; B.P : 102/82 mmHg; P.A : mild Tenderness",
+        "S/B Dr. Parshwa A Shah (6 PM); NO comorbidity; B.P : 100/78 mmHg",
+        "Adv Tim:- C.B.C, C.R.P, SGOT, SGPT, Blood U-R",
+        "2 PM :- Temp : 100.6*F give inj. Neomol",
+        "12 MN :- Temp : 102.6*F give Inj. Neomol"
+      ]
+    },
+    {
+      "date": "11/01/26",
+      "nursing_chart": {
+        "medications": [
+          "Inj. Cefotroy SB forte 3gm + 100cc NS IV BD (Administered at 10 AM, 10 PM)",
+          "Inj. Pantozem (40mg) (Administered at 8 AM, 8 PM)",
+          "Inj. pronden (4mg) (Administered at 8 AM, 8 PM)",
+          "Inj. NS / DNS @ 80ml / hr"
+        ],
+        "monitoring": [
+          { "time": "10 AM", "temp": 98.0, "pulse": 98, "bp": "110/70", "spo2": 98 },
+          { "time": "12 MD", "temp": 96.0, "pulse": 90, "bp": "112/80", "spo2": 97 },
+          { "time": "2 PM", "temp": 97.3, "pulse": 82, "bp": "114/80", "spo2": 98 },
+          { "time": "4 PM", "temp": 98.2, "pulse": 80, "bp": "116/80", "spo2": 99 },
+          { "time": "6 PM", "temp": 99.8, "pulse": 80, "bp": "118/80", "spo2": 98 },
+          { "time": "8 PM", "temp": 102.3, "pulse": 102, "bp": "116/82", "spo2": 99 },
+          { "time": "10 PM", "temp": 98.0, "pulse": 90, "bp": "112/84", "spo2": 97 },
+          { "time": "12 MN", "temp": 97.6, "pulse": 88, "bp": "112/82", "spo2": 98 },
+          { "time": "2 AM", "temp": 97.8, "pulse": 80, "bp": "110/80", "spo2": 99 },
+          { "time": "4 AM", "temp": 98.2, "pulse": 82, "bp": "114/80", "spo2": 98 },
+          { "time": "6 AM", "temp": 97.6, "pulse": 81, "bp": "112/80", "spo2": 98 },
+          { "time": "8 AM", "temp": 97.3, "pulse": 80, "bp": "114/80", "spo2": 98 }
+        ]
+      },
+      "clinical_notes": [
+        "S/B Dr. Parshwa A. Shah (10 Am); No comorbidity; B.P = 110/70 pulse = 97 / min",
+        "S/B Dr. Parshwa A. Shah; No comorbidity; B.P = 118/80 mmHg pulse = 80 / min",
+        "Adv Tim:- C.B.C, CRP",
+        "8 PM = Temp - 102.3 give Inj. Neomol"
+      ]
+    },
+    {
+      "date": "12/01/26",
+      "nursing_chart": {
+        "medications": [
+          "Inj. Cefotroy SB forte 3gm + 100cc NS IV BD (Administered at 10 AM, 10 PM)",
+          "Inj. pantozem (40mg) (Administered at 8 AM, 8 PM)",
+          "Inj. pronden (4mg) (Administered at 8 AM, 8 PM)",
+          "Inj. NS / dns @ 60ml / hr"
+        ],
+        "monitoring": [
+          { "time": "10 AM", "temp": 97.6, "pulse": 78, "bp": "110/80", "spo2": 98 },
+          { "time": "12 MD", "temp": 98.2, "pulse": 79, "bp": "112/80", "spo2": 99 },
+          { "time": "2 PM", "temp": 96.0, "pulse": 80, "bp": "114/82", "spo2": 97 },
+          { "time": "4 PM", "temp": 97.9, "pulse": 78, "bp": "112/78", "spo2": 98 },
+          { "time": "6 PM", "temp": 98.2, "pulse": 79, "bp": "116/80", "spo2": 99 },
+          { "time": "8 PM", "temp": 97.6, "pulse": 82, "bp": "108/78", "spo2": 98 },
+          { "time": "10 PM", "temp": 97.5, "pulse": 76, "bp": "104/80", "spo2": 99 },
+          { "time": "12 MN", "temp": 97.6, "pulse": 78, "bp": "106/76", "spo2": 99 },
+          { "time": "2 AM", "temp": 98.2, "pulse": 70, "bp": "110/82", "spo2": 99 },
+          { "time": "4 AM", "temp": 97.2, "pulse": 72, "bp": "114/76", "spo2": 98 },
+          { "time": "6 AM", "temp": 96.8, "pulse": 76, "bp": "116/80", "spo2": 97 },
+          { "time": "8 AM", "temp": 98.0, "pulse": 82, "bp": "114/82", "spo2": 98 }
+        ]
+      },
+      "clinical_notes": [
+        "S/B Dr. Parshwa A. Shah (10 AM); NO other comorbidity; B.P. = 112 / 82 P - 78 O2 = 98 %",
+        "S/B Dr. parshwa A Shah (6 PM); NO comorbidity; B.P = 116 / 80 P = 79 / min",
+        "Adv / Tim :- CBC, CRP, SGOT, SGPT"
+      ]
+    },
+    {
+      "date": "13/01/26",
+      "nursing_chart": {
+        "medications": [
+          "Inj. Cefotroy SB forte 3gm + 100cc NS IV BD (Administered at 10 AM, 10 PM)",
+          "Inj. pantozem (40mg) (Administered at 8 AM, 8 PM)",
+          "Inj. pronden (4mg) (Administered at 8 AM, 8 PM)",
+          "Inj. NS / dns @ 60ml / hr"
+        ],
+        "monitoring": [
+          { "time": "10 AM", "temp": 98.6, "pulse": 78, "bp": "120/80", "spo2": 98 },
+          { "time": "12 MD", "temp": 98.2, "pulse": 79, "bp": "126/80", "spo2": 98 },
+          { "time": "2 PM", "temp": 97.6, "pulse": 80, "bp": "122/80", "spo2": 98 },
+          { "time": "4 PM", "temp": 98.2, "pulse": 72, "bp": "110/80", "spo2": 99 },
+          { "time": "6 PM", "temp": 97.6, "pulse": 78, "bp": "114/82", "spo2": 98 },
+          { "time": "8 PM", "temp": 97.5, "pulse": 78, "bp": "116/80", "spo2": 92 },
+          { "time": "10 PM", "temp": 97.6, "pulse": 77, "bp": "112/80", "spo2": 98 },
+          { "time": "12 MN", "temp": 97.6, "pulse": 79, "bp": "110/80", "spo2": 97 },
+          { "time": "2 AM", "temp": 98.2, "pulse": 82, "bp": "112/86", "spo2": 98 },
+          { "time": "4 AM", "temp": 97.2, "pulse": 80, "bp": "110/80", "spo2": 99 },
+          { "time": "6 AM", "temp": 97.8, "pulse": 79, "bp": "112/80", "spo2": 98 },
+          { "time": "8 AM", "temp": 98.8, "pulse": 78, "bp": "110/80", "spo2": 90 }
+        ]
+      },
+      "clinical_notes": [
+        "S/B Dr. Parshwa A. Shah (10 AM); No other comorbidity; B.P. = 122/80 pulse = 78 min",
+        "S/B Dr. Parshwa A. Shah (6 PM); NO other comorbidity; B.P = 110/80 P = 80 / min T 98.4*F",
+        "Adv Discharge"
+      ]
+    }
+  ]
+}

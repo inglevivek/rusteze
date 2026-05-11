@@ -148,18 +148,21 @@ pub async fn fetch_deterministic_pathways(
 
     let q = "
         UNWIND $ids AS id
-        MATCH (a)-[r]->(b)
+        MATCH p = (a)-[*1..8]->(b)
         WHERE (a:Drug OR a:Concept OR a:Condition OR a:Symptom OR a:LabInvestigation)
           AND (b:Drug OR b:Concept OR b:Condition OR b:Symptom OR b:LabInvestigation)
           AND a.snomed_id IN $ids
           AND b.snomed_id IN $ids
-        RETURN a.name AS from_name, type(r) AS rel, b.name AS to_name,
-               a.snomed_id AS from_id, b.snomed_id AS to_id
+          AND a <> b
+        UNWIND relationships(p) AS r
+        WITH startNode(r) AS src, r, endNode(r) AS tgt
+        RETURN src.name AS from_name, type(r) AS rel, tgt.name AS to_name,
+               src.snomed_id AS from_id, tgt.snomed_id AS to_id
         LIMIT 100
     ";
 
     tracing::info!(
-        "┌── [Neo4j ▶ SEND] fetch_deterministic_pathways ─────────────\n│  Cypher: MATCH (a)-[r]->(b) WHERE both ends IN ids\n│  Params: ids={:?}\n└────────────────────────────────────────────────────────────",
+        "┌── [Neo4j ▶ SEND] fetch_deterministic_pathways ─────────────\n│  Cypher: MATCH (a)-[*1..8]->(b) WHERE both ends IN ids\n│  Params: ids={:?}\n└────────────────────────────────────────────────────────────",
         concept_ids
     );
 
@@ -210,18 +213,19 @@ pub async fn fetch_entity_neighborhood(
 
     let q = "
         UNWIND $ids AS id
-        MATCH (a)-[r]-(b)
+        MATCH p = (a)-[r*1..8]-(b)
         WHERE (a:Drug OR a:Concept OR a:Condition OR a:Symptom OR a:LabInvestigation)
           AND a.snomed_id = id
-        RETURN a.name AS center_name, a.snomed_id AS center_id,
-               type(r) AS rel, b.name AS neighbor_name,
-               b.snomed_id AS neighbor_id,
-               labels(b) AS neighbor_labels
+        UNWIND relationships(p) AS edge
+        WITH startNode(edge) AS src, edge, endNode(edge) AS tgt
+        RETURN src.name AS center_name, src.snomed_id AS center_id,
+               type(edge) AS rel, tgt.name AS neighbor_name,
+               tgt.snomed_id AS neighbor_id
         LIMIT 50
     ";
 
     tracing::info!(
-        "┌── [Neo4j ▶ SEND] fetch_entity_neighborhood ────────────────\n│  Cypher: MATCH (a)-[r]-(b) WHERE a.snomed_id IN ids LIMIT 50\n│  Params: ids={:?}\n└────────────────────────────────────────────────────────────",
+        "┌── [Neo4j ▶ SEND] fetch_entity_neighborhood ────────────────\n│  Cypher: MATCH (a)-[*1..8]-(b) WHERE a.snomed_id IN ids LIMIT 50\n│  Params: ids={:?}\n└────────────────────────────────────────────────────────────",
         concept_ids
     );
 

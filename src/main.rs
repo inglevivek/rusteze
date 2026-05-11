@@ -1,7 +1,7 @@
 use d3_graph_bench::{agent, clients, config};
 
 use axum::{
-    extract::{Json, Multipart, Path, State},
+    extract::{Json, Multipart, Path, Query, State},
     routing::{get, post},
     Router,
 };
@@ -52,6 +52,26 @@ async fn async_main() {
             .await;
     let pg_pool = clients::postgres::establish_pool(&cfg.pg_url).await;
 
+    // Self-Migration: Apply chat history schema if missing
+    {
+        tracing::info!("[Startup] Checking for chat history schema...");
+        let client = pg_pool.get().await;
+        match client {
+            Ok(c) => {
+                let migration_sql = std::fs::read_to_string("migrations/0003_chat_messages.sql")
+                    .unwrap_or_default();
+                if !migration_sql.is_empty() {
+                    match c.batch_execute(&migration_sql).await {
+                        Ok(_) => tracing::info!("✅ [Startup] Database schema upgraded (migrations applied)."),
+                        Err(e) => tracing::warn!("⚠️ [Startup] Migration check finished: {}", e),
+                    }
+                }
+            }
+            Err(e) => tracing::error!("❌ [Startup] Could not get DB connection for migration: {}", e),
+        }
+    }
+
+
     // Launch Ollama in the background
     // tracing::info!("Starting Ollama server...");
     // let _ollama_process = std::process::Command::new("ollama")
@@ -96,11 +116,22 @@ async fn async_main() {
 
     let app = Router::new()
         .route("/api/health", get(|| async { "D3-GraphBench Engine Live" }))
-        .route("/api/ingest", post(handle_ingest))
-        .route("/api/chat", post(handle_chat))
-        .route("/api/cases", get(handle_list_cases))
-        .route("/api/cases/:id", get(handle_get_case))
-        .route("/api/ingest/batch", post(handle_ingest_batch))
+        .route("/api/ingest",          post(handle_ingest))
+        .route("/api/chat",            post(handle_chat))
+        // ── Case CRUD ──────────────────────────────────────────────
+        .route("/api/cases",           get(handle_list_cases))
+        .route("/api/cases/:id",       get(handle_get_case)
+                                       .put(handle_update_case_text)
+                                       .delete(handle_delete_case))
+        // ── Adjudication retry ─────────────────────────────────────
+        .route("/api/cases/:id/readjudicate", post(handle_readjudicate))
+        // ── Chat history ───────────────────────────────────────────
+        .route("/api/cases/:id/history",
+               get(handle_get_history)
+               .delete(handle_clear_history))
+        .route("/api/messages/:msg_id", axum::routing::delete(handle_delete_message))
+        // ── Batch ingest ───────────────────────────────────────────
+        .route("/api/ingest/batch",    post(handle_ingest_batch))
         .fallback_service(ServeDir::new("public"))
         .layer(axum::extract::DefaultBodyLimit::max(50 * 1024 * 1024))
         .with_state(shared_state);
@@ -230,6 +261,14 @@ async fn handle_chat(
         }
     };
 
+    // Log the user turn BEFORE calling the LLM (preserved even on LLM error)
+    let sanitized_query = payload.query.replace('\0', "");
+    if let Err(e) = clients::postgres::append_chat_message(
+        &state.pg_pool, &payload.case_id, "user", &sanitized_query,
+    ).await {
+        tracing::warn!("[Chat] Failed to log user message for case '{}'. Error: {:?}", payload.case_id, e);
+    }
+
     let response = agent::chat::process_chat(
         state.config.clone(),
         state.main_llm.clone(),
@@ -241,6 +280,16 @@ async fn handle_chat(
         payload.query,
     )
     .await;
+
+    // Log the assistant turn
+    // Sanitization: Postgres TEXT cannot contain null bytes
+    let sanitized_response = response.replace('\0', "");
+    
+    if let Err(e) = clients::postgres::append_chat_message(
+        &state.pg_pool, &payload.case_id, "assistant", &sanitized_response,
+    ).await {
+        tracing::warn!("[Chat] Failed to log assistant response for case '{}'. Error: {:?}", payload.case_id, e);
+    }
 
     Ok(response)
 }
@@ -262,6 +311,127 @@ async fn handle_get_case(
         Ok(Some(case)) => Ok(Json(case)),
         Ok(None) => Err("Case not found".to_string()),
         Err(e) => Err(format!("Database error: {}", e)),
+    }
+}
+
+/// DELETE /api/cases/:id
+/// Permanently removes a case and (via CASCADE) all its chat history.
+async fn handle_delete_case(
+    State(state): State<Arc<AppState>>,
+    Path(case_id): Path<String>,
+) -> Result<String, String> {
+    match clients::postgres::delete_case(&state.pg_pool, &case_id).await {
+        Ok(true)  => Ok(format!("Case '{}' deleted", case_id)),
+        Ok(false) => Err(format!("Case '{}' not found", case_id)),
+        Err(e)    => Err(format!("Database error: {}", e)),
+    }
+}
+
+/// PUT /api/cases/:id
+/// Body: plain-text new document_text. Does NOT re-adjudicate.
+/// Use POST /api/cases/:id/readjudicate afterwards if needed.
+#[derive(Deserialize)]
+struct UpdateCaseTextBody {
+    document_text: String,
+}
+
+async fn handle_update_case_text(
+    State(state): State<Arc<AppState>>,
+    Path(case_id): Path<String>,
+    Json(body): Json<UpdateCaseTextBody>,
+) -> Result<String, String> {
+    if body.document_text.trim().is_empty() {
+        return Err("document_text cannot be empty".to_string());
+    }
+    match clients::postgres::update_case_text(&state.pg_pool, &case_id, &body.document_text).await {
+        Ok(true)  => Ok(format!("Case '{}' document text updated", case_id)),
+        Ok(false) => Err(format!("Case '{}' not found", case_id)),
+        Err(e)    => Err(format!("Database error: {}", e)),
+    }
+}
+
+/// POST /api/cases/:id/readjudicate
+/// Re-runs the full adjudication pipeline for an existing case and
+/// overwrites the stored report. Useful after graph updates.
+async fn handle_readjudicate(
+    State(state): State<Arc<AppState>>,
+    Path(case_id): Path<String>,
+) -> Result<String, String> {
+    let case = match clients::postgres::get_case(&state.pg_pool, &case_id).await {
+        Ok(Some(c)) => c,
+        Ok(None)    => return Err(format!("Case '{}' not found", case_id)),
+        Err(e)      => return Err(format!("Database error: {}", e)),
+    };
+
+    tracing::info!("[Readjudicate] Re-running adjudication for case '{}'", case_id);
+
+    let final_report = agent::pipeline::run_adjudication(
+        state.config.clone(),
+        state.main_llm.clone(),
+        state.slm.clone(),
+        state.ner_llm.clone(),
+        state.graph.clone(),
+        state.pg_pool.clone(),
+        case,
+    )
+    .await;
+
+    if let Err(e) = clients::postgres::update_case_report(&state.pg_pool, &case_id, &final_report).await {
+        tracing::error!("[Readjudicate] Failed to save new report: {}", e);
+    }
+
+    Ok(final_report)
+}
+
+/// GET /api/cases/:id/history?limit=50&before_id=
+/// Returns paginated chat history for a case, oldest-first.
+/// Use `before_id` (the lowest id from the previous page) to load older messages.
+#[derive(Deserialize)]
+struct HistoryParams {
+    limit:     Option<i64>,
+    before_id: Option<i64>,
+}
+
+async fn handle_get_history(
+    State(state): State<Arc<AppState>>,
+    Path(case_id): Path<String>,
+    Query(params): Query<HistoryParams>,
+) -> Result<Json<Vec<clients::postgres::ChatMessage>>, String> {
+    match clients::postgres::get_chat_history(
+        &state.pg_pool,
+        &case_id,
+        params.limit,
+        params.before_id,
+    )
+    .await
+    {
+        Ok(msgs) => Ok(Json(msgs)),
+        Err(e)   => Err(format!("Database error: {}", e)),
+    }
+}
+
+/// DELETE /api/cases/:id/history
+/// Wipes all chat history for a case. Returns count of deleted rows.
+async fn handle_clear_history(
+    State(state): State<Arc<AppState>>,
+    Path(case_id): Path<String>,
+) -> Result<String, String> {
+    match clients::postgres::clear_chat_history(&state.pg_pool, &case_id).await {
+        Ok(n)  => Ok(format!("Deleted {} message(s) for case '{}'", n, case_id)),
+        Err(e) => Err(format!("Database error: {}", e)),
+    }
+}
+
+/// DELETE /api/messages/:msg_id
+/// Deletes a single message by its numeric ID.
+async fn handle_delete_message(
+    State(state): State<Arc<AppState>>,
+    Path(msg_id): Path<i64>,
+) -> Result<String, String> {
+    match clients::postgres::delete_chat_message(&state.pg_pool, msg_id).await {
+        Ok(true)  => Ok(format!("Message {} deleted", msg_id)),
+        Ok(false) => Err(format!("Message {} not found", msg_id)),
+        Err(e)    => Err(format!("Database error: {}", e)),
     }
 }
 

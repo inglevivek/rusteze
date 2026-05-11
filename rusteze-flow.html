@@ -1,0 +1,1184 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rusteze — Message Flow Visualizer</title>
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&f[]=cabinet-grotesk@400,500,700,800&display=swap" rel="stylesheet">
+<style>
+:root,[data-theme="light"]{
+  --color-bg:#f7f6f2;--color-surface:#f9f8f5;--color-surface-2:#fbfbf9;
+  --color-surface-offset:#f3f0ec;--color-surface-dynamic:#e6e4df;
+  --color-divider:#dcd9d5;--color-border:#d4d1ca;
+  --color-text:#28251d;--color-text-muted:#7a7974;--color-text-faint:#bab9b4;
+  --color-primary:#01696f;--color-primary-hover:#0c4e54;
+  --color-primary-highlight:#cedcd8;
+  --color-success:#437a22;--color-success-highlight:#d4dfcc;
+  --color-warning:#964219;--color-warning-highlight:#ddcfc6;
+  --color-error:#a12c7b;--color-error-highlight:#e0ced7;
+  --color-blue:#006494;--color-blue-highlight:#c6d8e4;
+  --color-gold:#d19900;--color-gold-highlight:#e9e0c6;
+  --color-orange:#da7101;--color-orange-highlight:#e7d7c4;
+  --color-purple:#7a39bb;--color-purple-highlight:#dacfde;
+  --shadow-sm:0 1px 2px oklch(0.2 0.01 80/0.06);
+  --shadow-md:0 4px 12px oklch(0.2 0.01 80/0.08);
+  --shadow-lg:0 12px 32px oklch(0.2 0.01 80/0.12);
+  --radius-sm:0.375rem;--radius-md:0.5rem;--radius-lg:0.75rem;--radius-xl:1rem;
+  --font-display:'Cabinet Grotesk',sans-serif;--font-body:'Satoshi',sans-serif;
+}
+[data-theme="dark"]{
+  --color-bg:#171614;--color-surface:#1c1b19;--color-surface-2:#201f1d;
+  --color-surface-offset:#1d1c1a;--color-surface-dynamic:#2d2c2a;
+  --color-divider:#262523;--color-border:#393836;
+  --color-text:#cdccca;--color-text-muted:#797876;--color-text-faint:#5a5957;
+  --color-primary:#4f98a3;--color-primary-hover:#227f8b;
+  --color-primary-highlight:#313b3b;
+  --color-success:#6daa45;--color-success-highlight:#3a4435;
+  --color-warning:#bb653b;--color-warning-highlight:#564942;
+  --color-error:#d163a7;--color-error-highlight:#4c3d46;
+  --color-blue:#5591c7;--color-blue-highlight:#3a4550;
+  --color-gold:#e8af34;--color-gold-highlight:#4d4332;
+  --color-orange:#fdab43;--color-orange-highlight:#564b3e;
+  --color-purple:#a86fdf;--color-purple-highlight:#4e4652;
+  --shadow-sm:0 1px 2px oklch(0 0 0/0.2);
+  --shadow-md:0 4px 12px oklch(0 0 0/0.3);
+  --shadow-lg:0 12px 32px oklch(0 0 0/0.4);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{-webkit-font-smoothing:antialiased;scroll-behavior:smooth;}
+body{min-height:100dvh;font-family:var(--font-body);font-size:1rem;color:var(--color-text);background:var(--color-bg);line-height:1.6;}
+
+/* Header */
+.header{
+  position:sticky;top:0;z-index:100;
+  background:color-mix(in oklch,var(--color-bg) 85%,transparent);
+  backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--color-border);
+  padding:0.75rem 1.5rem;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.logo{display:flex;align-items:center;gap:0.5rem;font-family:var(--font-display);font-weight:800;font-size:1.1rem;}
+.logo svg{color:var(--color-primary);}
+.subtitle{font-size:0.8rem;color:var(--color-text-muted);margin-top:0.1rem;font-weight:400;}
+.theme-toggle{background:none;border:1px solid var(--color-border);border-radius:var(--radius-md);padding:0.4rem 0.6rem;cursor:pointer;color:var(--color-text-muted);transition:all 180ms ease;}
+.theme-toggle:hover{color:var(--color-text);border-color:var(--color-text-muted);}
+
+/* Layout */
+.layout{display:grid;grid-template-columns:240px 1fr;min-height:calc(100dvh - 56px);}
+.sidebar{border-right:1px solid var(--color-border);padding:1.5rem 1rem;position:sticky;top:56px;height:calc(100dvh - 56px);overflow-y:auto;}
+.main{padding:2rem 2rem 4rem;}
+
+/* Sidebar nav */
+.sidebar-label{font-size:0.7rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--color-text-faint);margin-bottom:0.75rem;padding-left:0.5rem;}
+.nav-item{display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.5rem;border-radius:var(--radius-md);cursor:pointer;font-size:0.875rem;color:var(--color-text-muted);transition:all 150ms ease;border:none;background:none;width:100%;text-align:left;margin-bottom:0.15rem;}
+.nav-item:hover{background:var(--color-surface-offset);color:var(--color-text);}
+.nav-item.active{background:var(--color-primary-highlight);color:var(--color-primary);font-weight:600;}
+.nav-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.nav-sep{height:1px;background:var(--color-divider);margin:1rem 0;}
+
+/* Flow page */
+.page{display:none;}
+.page.active{display:block;}
+.page-title{font-family:var(--font-display);font-weight:800;font-size:1.6rem;margin-bottom:0.25rem;}
+.page-sub{color:var(--color-text-muted);font-size:0.9rem;margin-bottom:2rem;}
+
+/* Flow cards */
+.flow{display:flex;flex-direction:column;gap:0;}
+.flow-step{
+  display:grid;grid-template-columns:48px 1fr;gap:0;
+  position:relative;
+}
+.flow-step-left{display:flex;flex-direction:column;align-items:center;}
+.flow-step-num{
+  width:40px;height:40px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-weight:700;font-size:0.85rem;font-family:var(--font-display);
+  flex-shrink:0;z-index:1;
+  border:2px solid;
+}
+.flow-step-line{width:2px;flex:1;min-height:20px;}
+.flow-step:last-child .flow-step-line{display:none;}
+
+.flow-step-body{
+  background:var(--color-surface);
+  border:1px solid var(--color-border);
+  border-radius:var(--radius-lg);
+  padding:1rem 1.25rem;
+  margin-bottom:1.25rem;
+  margin-left:0.75rem;
+  box-shadow:var(--shadow-sm);
+  transition:box-shadow 200ms ease,border-color 200ms ease;
+  cursor:pointer;
+}
+.flow-step-body:hover{box-shadow:var(--shadow-md);}
+.flow-step-body.expanded{border-color:var(--color-primary);}
+.step-header{display:flex;align-items:center;justify-content:space-between;gap:1rem;}
+.step-tag{font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;padding:0.2rem 0.5rem;border-radius:var(--radius-sm);}
+.step-title{font-weight:700;font-size:0.95rem;font-family:var(--font-display);flex:1;}
+.step-file{font-size:0.72rem;color:var(--color-text-faint);font-family:monospace;white-space:nowrap;}
+.step-toggle{color:var(--color-text-faint);transition:transform 200ms ease;flex-shrink:0;}
+.flow-step-body.expanded .step-toggle{transform:rotate(180deg);}
+.step-detail{max-height:0;overflow:hidden;transition:max-height 350ms cubic-bezier(0.16,1,0.3,1);}
+.flow-step-body.expanded .step-detail{max-height:800px;}
+.step-detail-inner{padding-top:0.75rem;margin-top:0.75rem;border-top:1px solid var(--color-divider);}
+.step-desc{font-size:0.875rem;color:var(--color-text-muted);margin-bottom:0.75rem;line-height:1.65;}
+
+/* Code blocks */
+.code-block{
+  background:var(--color-surface-offset);
+  border:1px solid var(--color-border);
+  border-radius:var(--radius-md);
+  padding:0.75rem 1rem;
+  font-family:monospace;font-size:0.78rem;
+  color:var(--color-text-muted);
+  overflow-x:auto;
+  white-space:pre;
+  line-height:1.6;
+  margin-bottom:0.75rem;
+}
+.code-block .kw{color:var(--color-primary);}
+.code-block .fn{color:var(--color-gold);}
+.code-block .str{color:var(--color-success);}
+.code-block .cm{color:var(--color-text-faint);}
+.code-block .tp{color:var(--color-orange);}
+.code-block .num{color:var(--color-blue);}
+
+/* Data pills */
+.data-flow{display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.75rem;}
+.data-pill{padding:0.25rem 0.65rem;border-radius:var(--radius-full);font-size:0.75rem;font-weight:600;display:flex;align-items:center;gap:0.35rem;}
+.arrow-pill{color:var(--color-text-faint);font-size:1rem;}
+
+/* Decision blocks */
+.decision-box{
+  border-radius:var(--radius-md);padding:0.65rem 0.9rem;
+  font-size:0.8rem;margin-bottom:0.5rem;
+  display:flex;align-items:flex-start;gap:0.6rem;
+}
+.decision-box .decision-icon{font-size:1rem;flex-shrink:0;margin-top:0.05rem;}
+
+/* Sub-steps list */
+.sub-steps{list-style:none;display:flex;flex-direction:column;gap:0.35rem;}
+.sub-steps li{
+  padding:0.4rem 0.6rem;border-radius:var(--radius-sm);
+  font-size:0.8rem;color:var(--color-text-muted);
+  background:var(--color-surface-offset);
+  display:flex;align-items:flex-start;gap:0.5rem;
+  line-height:1.5;
+}
+.sub-steps li .bullet{flex-shrink:0;margin-top:0.15rem;width:5px;height:5px;border-radius:50%;background:var(--color-primary);display:inline-block;}
+
+/* Section heading inside detail */
+.detail-section{font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--color-text-faint);margin:0.9rem 0 0.4rem;}
+
+/* Color themes for steps */
+.t-teal .flow-step-num{background:var(--color-primary-highlight);color:var(--color-primary);border-color:var(--color-primary);}
+.t-teal .flow-step-line{background:var(--color-primary);}
+.t-teal .step-tag{background:var(--color-primary-highlight);color:var(--color-primary);}
+
+.t-blue .flow-step-num{background:var(--color-blue-highlight);color:var(--color-blue);border-color:var(--color-blue);}
+.t-blue .flow-step-line{background:var(--color-blue);}
+.t-blue .step-tag{background:var(--color-blue-highlight);color:var(--color-blue);}
+
+.t-gold .flow-step-num{background:var(--color-gold-highlight);color:var(--color-gold);border-color:var(--color-gold);}
+.t-gold .flow-step-line{background:var(--color-gold);}
+.t-gold .step-tag{background:var(--color-gold-highlight);color:var(--color-gold);}
+
+.t-orange .flow-step-num{background:var(--color-orange-highlight);color:var(--color-orange);border-color:var(--color-orange);}
+.t-orange .flow-step-line{background:var(--color-orange);}
+.t-orange .step-tag{background:var(--color-orange-highlight);color:var(--color-orange);}
+
+.t-purple .flow-step-num{background:var(--color-purple-highlight);color:var(--color-purple);border-color:var(--color-purple);}
+.t-purple .flow-step-line{background:var(--color-purple);}
+.t-purple .step-tag{background:var(--color-purple-highlight);color:var(--color-purple);}
+
+.t-success .flow-step-num{background:var(--color-success-highlight);color:var(--color-success);border-color:var(--color-success);}
+.t-success .flow-step-line{background:var(--color-success);}
+.t-success .step-tag{background:var(--color-success-highlight);color:var(--color-success);}
+
+.t-warning .flow-step-num{background:var(--color-warning-highlight);color:var(--color-warning);border-color:var(--color-warning);}
+.t-warning .flow-step-line{background:var(--color-warning);}
+.t-warning .step-tag{background:var(--color-warning-highlight);color:var(--color-warning);}
+
+.t-error .flow-step-num{background:var(--color-error-highlight);color:var(--color-error);border-color:var(--color-error);}
+.t-error .flow-step-line{background:var(--color-error);}
+.t-error .step-tag{background:var(--color-error-highlight);color:var(--color-error);}
+
+/* Overview page */
+.overview-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem;margin-bottom:2rem;}
+.overview-card{
+  background:var(--color-surface);border:1px solid var(--color-border);
+  border-radius:var(--radius-lg);padding:1.1rem;
+  box-shadow:var(--shadow-sm);cursor:pointer;
+  transition:all 200ms ease;
+}
+.overview-card:hover{box-shadow:var(--shadow-md);transform:translateY(-2px);}
+.oc-icon{width:36px;height:36px;border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;font-size:1.1rem;margin-bottom:0.75rem;}
+.oc-title{font-weight:700;font-family:var(--font-display);font-size:0.9rem;margin-bottom:0.25rem;}
+.oc-desc{font-size:0.78rem;color:var(--color-text-muted);line-height:1.5;}
+.oc-files{margin-top:0.6rem;font-size:0.7rem;font-family:monospace;color:var(--color-text-faint);}
+
+/* Architecture diagram */
+.arch-diagram{
+  background:var(--color-surface);border:1px solid var(--color-border);
+  border-radius:var(--radius-xl);padding:1.5rem;margin-bottom:2rem;
+  overflow-x:auto;
+}
+.arch-row{display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;flex-wrap:nowrap;}
+.arch-row:last-child{margin-bottom:0;}
+.arch-box{
+  padding:0.45rem 0.9rem;border-radius:var(--radius-md);font-size:0.78rem;font-weight:600;
+  white-space:nowrap;border:1px solid;
+}
+.arch-arrow{color:var(--color-text-faint);font-size:1.1rem;flex-shrink:0;}
+.arch-label{font-size:0.68rem;color:var(--color-text-faint);margin-right:0.5rem;white-space:nowrap;min-width:80px;text-align:right;}
+
+/* State viewer */
+.state-box{
+  background:var(--color-surface);border:1px solid var(--color-border);
+  border-radius:var(--radius-lg);padding:1.25rem;margin-bottom:1.25rem;
+}
+.state-title{font-weight:700;font-family:var(--font-display);font-size:0.95rem;margin-bottom:0.75rem;display:flex;align-items:center;gap:0.5rem;}
+.state-fields{display:grid;grid-template-columns:auto 1fr;gap:0.3rem 1rem;align-items:baseline;}
+.sf-key{font-family:monospace;font-size:0.78rem;color:var(--color-primary);font-weight:600;}
+.sf-val{font-size:0.8rem;color:var(--color-text-muted);}
+.sf-type{font-family:monospace;font-size:0.7rem;color:var(--color-text-faint);}
+
+/* Decision matrix */
+.matrix{width:100%;border-collapse:collapse;font-size:0.8rem;margin-bottom:1rem;}
+.matrix th{padding:0.5rem 0.75rem;text-align:left;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--color-text-faint);border-bottom:1px solid var(--color-divider);font-weight:700;}
+.matrix td{padding:0.6rem 0.75rem;border-bottom:1px solid var(--color-divider);vertical-align:top;}
+.matrix tr:last-child td{border-bottom:none;}
+.matrix tr:hover td{background:var(--color-surface-offset);}
+.badge{padding:0.15rem 0.45rem;border-radius:var(--radius-sm);font-size:0.7rem;font-weight:700;}
+
+/* Mobile */
+@media(max-width:768px){
+  .layout{grid-template-columns:1fr;}
+  .sidebar{display:none;}
+  .main{padding:1.25rem;}
+}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="logo">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-label="Rusteze">
+      <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+    </svg>
+    <div>
+      <div>rusteze</div>
+      <div class="subtitle">D3-GraphBench Engine — Data Flow Visualizer</div>
+    </div>
+  </div>
+  <button class="theme-toggle" data-theme-toggle aria-label="Toggle theme">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  </button>
+</header>
+
+<div class="layout">
+  <nav class="sidebar">
+    <div class="sidebar-label">Flows</div>
+    <button class="nav-item active" onclick="showPage('overview')">
+      <span class="nav-dot" style="background:var(--color-primary)"></span>Overview
+    </button>
+    <button class="nav-item" onclick="showPage('chat')">
+      <span class="nav-dot" style="background:var(--color-blue)"></span>/api/chat
+    </button>
+    <button class="nav-item" onclick="showPage('ingest')">
+      <span class="nav-dot" style="background:var(--color-gold)"></span>/api/ingest
+    </button>
+    <div class="nav-sep"></div>
+    <div class="sidebar-label">Internals</div>
+    <button class="nav-item" onclick="showPage('pipeline')">
+      <span class="nav-dot" style="background:var(--color-purple)"></span>pipeline.rs
+    </button>
+    <button class="nav-item" onclick="showPage('promptbuilder')">
+      <span class="nav-dot" style="background:var(--color-orange)"></span>prompt_builder.rs
+    </button>
+    <button class="nav-item" onclick="showPage('appstate')">
+      <span class="nav-dot" style="background:var(--color-success)"></span>AppState
+    </button>
+  </nav>
+
+  <main class="main">
+
+    <!-- OVERVIEW PAGE -->
+    <div class="page active" id="page-overview">
+      <div class="page-title">System Architecture</div>
+      <div class="page-sub">Click any flow in the sidebar or card below to drill into it.</div>
+
+      <div class="arch-diagram">
+        <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--color-text-faint);margin-bottom:1rem;">Request Lifecycle</div>
+        <div class="arch-row">
+          <span class="arch-label">Client</span>
+          <span class="arch-box" style="background:var(--color-primary-highlight);color:var(--color-primary);border-color:var(--color-primary);">HTTP Request</span>
+          <span class="arch-arrow">→</span>
+          <span class="arch-box" style="background:var(--color-surface-offset);color:var(--color-text);border-color:var(--color-border);">Axum Router</span>
+          <span class="arch-arrow">→</span>
+          <span class="arch-box" style="background:var(--color-blue-highlight);color:var(--color-blue);border-color:var(--color-blue);">Handler fn</span>
+          <span class="arch-arrow">→</span>
+          <span class="arch-box" style="background:var(--color-gold-highlight);color:var(--color-gold);border-color:var(--color-gold);">AppState (Arc)</span>
+        </div>
+        <div class="arch-row">
+          <span class="arch-label">Extraction</span>
+          <span class="arch-box" style="background:var(--color-surface-offset);color:var(--color-text);border-color:var(--color-border);">PDF / JSON</span>
+          <span class="arch-arrow">→</span>
+          <span class="arch-box" style="background:var(--color-warning-highlight);color:var(--color-warning);border-color:var(--color-warning);">OCR Sidecar</span>
+          <span class="arch-arrow">→</span>
+          <span class="arch-box" style="background:var(--color-surface-offset);color:var(--color-text);border-color:var(--color-border);">raw_text String</span>
+        </div>
+        <div class="arch-row">
+          <span class="arch-label">Knowledge</span>
+          <span class="arch-box" style="background:var(--color-primary-highlight);color:var(--color-primary);border-color:var(--color-primary);">Neo4j Graph</span>
+          <span class="arch-arrow">+</span>
+          <span class="arch-box" style="background:var(--color-purple-highlight);color:var(--color-purple);border-color:var(--color-purple);">Qdrant Vectors</span>
+          <span class="arch-arrow">+</span>
+          <span class="arch-box" style="background:var(--color-blue-highlight);color:var(--color-blue);border-color:var(--color-blue);">Postgres RDBMS</span>
+          <span class="arch-arrow">→</span>
+          <span class="arch-box" style="background:var(--color-orange-highlight);color:var(--color-orange);border-color:var(--color-orange);">grounded_context</span>
+        </div>
+        <div class="arch-row">
+          <span class="arch-label">LLM</span>
+          <span class="arch-box" style="background:var(--color-gold-highlight);color:var(--color-gold);border-color:var(--color-gold);">Ollama qwen3.5:9B (main)</span>
+          <span class="arch-arrow">+</span>
+          <span class="arch-box" style="background:var(--color-blue-highlight);color:var(--color-blue);border-color:var(--color-blue);">qwen2.5:3b (NER/SLM)</span>
+          <span class="arch-arrow">→</span>
+          <span class="arch-box" style="background:var(--color-success-highlight);color:var(--color-success);border-color:var(--color-success);">JSON Verdict / Response</span>
+          <span class="arch-arrow">→</span>
+          <span class="arch-box" style="background:var(--color-primary-highlight);color:var(--color-primary);border-color:var(--color-primary);">HTTP Response</span>
+        </div>
+      </div>
+
+      <div class="overview-grid">
+        <div class="overview-card" onclick="showPage('chat')">
+          <div class="oc-icon" style="background:var(--color-blue-highlight);color:var(--color-blue);">💬</div>
+          <div class="oc-title">/api/chat</div>
+          <div class="oc-desc">User query → RAG context retrieval → Graph grounding → LLM answer</div>
+          <div class="oc-files">agent/chat.rs → prompt_builder.rs</div>
+        </div>
+        <div class="overview-card" onclick="showPage('ingest')">
+          <div class="oc-icon" style="background:var(--color-gold-highlight);color:var(--color-gold);">📄</div>
+          <div class="oc-title">/api/ingest</div>
+          <div class="oc-desc">File upload → extraction → embed → Neo4j+Qdrant → adjudication report</div>
+          <div class="oc-files">main.rs → agent/pipeline.rs</div>
+        </div>
+        <div class="overview-card" onclick="showPage('pipeline')">
+          <div class="oc-icon" style="background:var(--color-purple-highlight);color:var(--color-purple);">⚙️</div>
+          <div class="oc-title">pipeline.rs</div>
+          <div class="oc-desc">Dual-Brain orchestrator: builds grounded context then strikes the heavy LLM</div>
+          <div class="oc-files">agent/pipeline.rs</div>
+        </div>
+        <div class="overview-card" onclick="showPage('promptbuilder')">
+          <div class="oc-icon" style="background:var(--color-orange-highlight);color:var(--color-orange);">🧠</div>
+          <div class="oc-title">prompt_builder.rs</div>
+          <div class="oc-desc">NER → entity resolution → Neo4j pathways → Qdrant global knowledge</div>
+          <div class="oc-files">agent/prompt_builder.rs</div>
+        </div>
+        <div class="overview-card" onclick="showPage('appstate')">
+          <div class="oc-icon" style="background:var(--color-success-highlight);color:var(--color-success);">🗄️</div>
+          <div class="oc-title">AppState</div>
+          <div class="oc-desc">Shared Arc<> state: Neo4j graph, Postgres pool, main_llm, slm</div>
+          <div class="oc-files">main.rs</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CHAT FLOW PAGE -->
+    <div class="page" id="page-chat">
+      <div class="page-title">/ api / chat — Message Execution</div>
+      <div class="page-sub">What happens the moment a chat query is submitted. Every step, every function call.</div>
+
+      <div class="flow">
+
+        <div class="flow-step t-blue">
+          <div class="flow-step-left">
+            <div class="flow-step-num">1</div>
+            <div class="flow-step-line"></div>
+          </div>
+          <div class="flow-step-body" onclick="toggleStep(this)">
+            <div class="step-header">
+              <span class="step-tag">HTTP</span>
+              <span class="step-title">POST /api/chat — Axum receives JSON payload</span>
+              <span class="step-file">main.rs:handle_chat</span>
+              <svg class="step-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <div class="step-detail">
+              <div class="step-detail-inner">
+                <p class="step-desc">Axum deserializes the JSON body into a <code>ChatRequest</code> struct. Validation: both <code>case_id</code> and <code>query</code> must be non-empty strings — otherwise a 400-equivalent error is returned immediately.</p>
+                <div class="detail-section">Struct definition</div>
+                <div class="code-block"><span class="tp">#[derive(Deserialize)]</span>
+<span class="kw">struct</span> <span class="tp">ChatRequest</span> {
+    case_id: <span class="tp">String</span>,  <span class="cm">// e.g. "case-001"</span>
+    query: <span class="tp">String</span>,    <span class="cm">// e.g. "Is metformin appropriate here?"</span>
+}
+</div>
+                <div class="detail-section">Data in flight</div>
+                <div class="data-flow">
+                  <span class="data-pill" style="background:var(--color-blue-highlight);color:var(--color-blue);">🌐 JSON body</span>
+                  <span class="arrow-pill">→</span>
+                  <span class="data-pill" style="background:var(--color-surface-offset);color:var(--color-text-muted);">ChatRequest { case_id, query }</span>
+                  <span class="arrow-pill">→</span>
+                  <span class="data-pill" style="background:var(--color-primary-highlight);color:var(--color-primary);">AppState (cloned Arc)</span>
+                </div>
+                <div class="detail-section">Runtime guard — query validation</div>
+                <div class="code-block"><span class="cm">// process_chat() — chat.rs</span>
+<span class="kw">if</span> query.len() > <span class="num">100000</span> {
+    <span class="fn">tracing::error!</span>(<span class="str">"[Chat] ❌ INVALID QUERY: oversized string"</span>);
+    <span class="kw">return</span> <span class="str">"Internal error: query string is too large."</span>.to_string();
+}
+</div>
+                <div class="decision-box" style="background:var(--color-warning-highlight);">
+                  <span class="decision-icon">⚠️</span>
+                  <span style="font-size:0.8rem;color:var(--color-warning);">Previously the guard blocked queries &gt;2000 chars and template strings — this caused the <code>"Claim Evaluation Report"</code> rejection bug. Guard now only blocks genuinely oversized strings (&gt;100k chars).</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flow-step t-purple">
+          <div class="flow-step-left">
+            <div class="flow-step-num">2</div>
+            <div class="flow-step-line"></div>
+          </div>
+          <div class="flow-step-body" onclick="toggleStep(this)">
+            <div class="step-header">
+              <span class="step-tag">QDRANT</span>
+              <span class="step-title">search_case_context() — Semantic RAG retrieval (case-scoped)</span>
+              <span class="step-file">clients/qdrant.rs</span>
+              <svg class="step-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <div class="step-detail">
+              <div class="step-detail-inner">
+                <p class="step-desc">The user's query string is embedded using the <strong>BioLORD embedding sidecar</strong> (Python FastAPI, port 8000, 768-dim cosine space) — no API call to external services. The resulting vector is searched against the <code>clinical_cases</code> Qdrant collection with a <strong>strict case_id metadata filter</strong> to enforce patient privacy. Only chunks belonging to this specific case are returned.</p>
+                <div class="detail-section">Execution path</div>
+                <ul class="sub-steps">
+                  <li><span class="bullet"></span>Initialize <code>TextEmbedding</code> model (BGESmallENV15) — CPU local inference</li>
+                  <li><span class="bullet"></span>Embed <code>query</code> string → 384-dim f32 vector</li>
+                  <li><span class="bullet"></span>Build Qdrant <code>Filter::all([Condition::matches("case_id", case_id)])</code></li>
+                  <li><span class="bullet"></span>Search <code>clinical_cases</code> collection — top 5 hits with HNSW (ef=128)</li>
+                  <li><span class="bullet"></span>Collect <code>payload["text"]</code> from each hit → concatenate with <code>---</code> separator</li>
+                </ul>
+                <div class="detail-section">Data out</div>
+                <div class="data-flow">
+                  <span class="data-pill" style="background:var(--color-purple-highlight);color:var(--color-purple);">query: String</span>
+                  <span class="arrow-pill">→ embed →</span>
+                  <span class="data-pill" style="background:var(--color-purple-highlight);color:var(--color-purple);">[f32; 384]</span>
+                  <span class="arrow-pill">→ HNSW →</span>
+                  <span class="data-pill" style="background:var(--color-surface-offset);color:var(--color-text-muted);">case_context: String</span>
+                </div>
+                <div class="decision-box" style="background:var(--color-warning-highlight);">
+                  <span class="decision-icon">⚠️</span>
+                  <span style="font-size:0.8rem;color:var(--color-warning);">On Qdrant error → <code>case_context = ""</code> (empty string fallback, flow continues)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flow-step t-orange">
+          <div class="flow-step-left">
+            <div class="flow-step-num">3</div>
+            <div class="flow-step-line"></div>
+          </div>
+          <div class="flow-step-body" onclick="toggleStep(this)">
+            <div class="step-header">
+              <span class="step-tag">AGENT</span>
+              <span class="step-title">build_grounded_context() — NER + Graph + Global Knowledge</span>
+              <span class="step-file">agent/prompt_builder.rs</span>
+              <svg class="step-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <div class="step-detail">
+              <div class="step-detail-inner">
+                <p class="step-desc">The <em>retrieved case chunks</em> (not the full document) are passed through the full grounding pipeline. This adds three knowledge layers on top of the raw text: deterministic graph pathways, textbook neighborhood, and global semantic medical facts. See the <strong>prompt_builder.rs</strong> page for full internals.</p>
+                <div class="detail-section">Input → Output</div>
+                <div class="data-flow">
+                  <span class="data-pill" style="background:var(--color-surface-offset);color:var(--color-text-muted);">case_context (chunks)</span>
+                  <span class="arrow-pill">→</span>
+                  <span class="data-pill" style="background:var(--color-orange-highlight);color:var(--color-orange);">grounded_context: String</span>
+                </div>
+                <div class="detail-section">What's inside grounded_context</div>
+                <div class="code-block">### DETERMINISTIC GRAPH PATHWAYS (Neo4j):
+- [<span class="str">Metformin</span>] -> [<span class="str">INDICATED_FOR</span>] -> [<span class="str">Type 2 Diabetes</span>]
+
+### TEXTBOOK MEDICAL KNOWLEDGE (Neo4j Neighborhood):
+- [<span class="str">Metformin</span>] --(CONTRAINDICATED_WITH)-- [<span class="str">Renal Failure</span>]
+
+### SEMANTIC MEDICAL TRUTH (BODHI):
+- <span class="cm">Metformin reduces hepatic glucose production...</span>
+</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flow-step t-gold">
+          <div class="flow-step-left">
+            <div class="flow-step-num">4</div>
+            <div class="flow-step-line"></div>
+          </div>
+          <div class="flow-step-body" onclick="toggleStep(this)">
+            <div class="step-header">
+              <span class="step-tag">PROMPT</span>
+              <span class="step-title">System prompt assembly — 3-layer context injection</span>
+              <span class="step-file">agent/chat.rs:process_chat</span>
+              <svg class="step-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <div class="step-detail">
+              <div class="step-detail-inner">
+                <p class="step-desc">The system prompt is assembled by injecting both knowledge layers. The user's original query becomes the <code>user</code> message. The LLM is explicitly instructed not to hallucinate external medical history.</p>
+                <div class="code-block"><span class="kw">let</span> system_prompt = <span class="fn">format!</span>(
+  <span class="str">"You are a clinical AI assistant...
+
+  ### PATIENT CONTEXT (Case ID: {case_id}):
+  {case_context}          ← top-5 RAG chunks
+
+  ### GLOBAL KNOWLEDGE GROUNDING:
+  {grounded_context}      ← Neo4j + Qdrant global"</span>
+);</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flow-step t-teal">
+          <div class="flow-step-left">
+            <div class="flow-step-num">5</div>
+            <div class="flow-step-line"></div>
+          </div>
+          <div class="flow-step-body" onclick="toggleStep(this)">
+            <div class="step-header">
+              <span class="step-tag">LLM</span>
+              <span class="step-title">chat_with_context() — Ollama local call (main_llm)</span>
+              <span class="step-file">clients/ollama.rs</span>
+              <svg class="step-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <div class="step-detail">
+              <div class="step-detail-inner">
+                <p class="step-desc">The assembled system prompt and user query are sent to <strong>qwen3.5:9B</strong> via the local Ollama instance (temperature 0.2, num_ctx 20480). The response is a free-text clinical answer. If the call errors, an inline error message string is returned.</p>
+                <div class="detail-section">API payload</div>
+                <div class="code-block">{
+  <span class="str">"model"</span>: <span class="str">"qwen3.5:9B"</span>,  <span class="cm">// main_model from config</span>
+  <span class="str">"temperature"</span>: <span class="num">0.2</span>,
+  <span class="str">"stream"</span>: <span class="kw">false</span>,
+  <span class="str">"num_ctx"</span>: <span class="num">20480</span>,
+  <span class="str">"messages"</span>: [
+    { <span class="str">"role"</span>: <span class="str">"system"</span>, <span class="str">"content"</span>: system_prompt },
+    { <span class="str">"role"</span>: <span class="str">"user"</span>,   <span class="str">"content"</span>: user_query }
+  ]
+}
+</div>
+                <div class="detail-section">Response</div>
+                <div class="data-flow">
+                  <span class="data-pill" style="background:var(--color-gold-highlight);color:var(--color-gold);">Ollama JSON</span>
+                  <span class="arrow-pill">→ message.content →</span>
+                  <span class="data-pill" style="background:var(--color-success-highlight);color:var(--color-success);">String (free text)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flow-step t-success">
+          <div class="flow-step-left">
+            <div class="flow-step-num">6</div>
+            <div class="flow-step-line"></div>
+          </div>
+          <div class="flow-step-body" onclick="toggleStep(this)">
+            <div class="step-header">
+              <span class="step-tag">RESPONSE</span>
+              <span class="step-title">HTTP 200 — plain text clinical answer returned</span>
+              <span class="step-file">main.rs → Ok(response)</span>
+              <svg class="step-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <div class="step-detail">
+              <div class="step-detail-inner">
+                <p class="step-desc">Axum's <code>Result&lt;String, String&gt;</code> return type maps <code>Ok(response)</code> to HTTP 200 with <code>text/plain</code> body, and <code>Err(msg)</code> to HTTP 500 with the error string. Nothing is persisted — chat is stateless.</p>
+                <div class="decision-box" style="background:var(--color-primary-highlight);">
+                  <span class="decision-icon">💾</span>
+                  <span style="font-size:0.8rem;color:var(--color-primary);">Both turns are now <strong>persisted</strong> to <code>chat_messages</code> in Postgres — user turn before the LLM call, assistant turn after. Logging is non-fatal (warn-only on failure).</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- INGEST FLOW PAGE -->
+    <div class="page" id="page-ingest">
+      <div class="page-title">/ api / ingest — Document Execution</div>
+      <div class="page-sub">Full execution path from file upload to stored adjudication report.</div>
+
+      <div class="flow">
+
+        <div class="flow-step t-gold">
+          <div class="flow-step-left"><div class="flow-step-num">1</div><div class="flow-step-line"></div></div>
+          <div class="flow-step-body" onclick="toggleStep(this)">
+            <div class="step-header">
+              <span class="step-tag">HTTP</span>
+              <span class="step-title">POST /api/ingest — multipart/form-data parsing</span>
+              <span class="step-file">main.rs:handle_ingest</span>
+              <svg class="step-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <div class="step-detail"><div class="step-detail-inner">
+              <p class="step-desc">Axum iterates through multipart fields. Fields named <code>case_id</code> are read as text. Fields named <code>document</code> are read as raw bytes with their filename preserved. The 50MB body limit is enforced at the router level. Empty byte arrays are silently dropped.</p>
+              <div class="detail-section">Field extraction loop</div>
+              <ul class="sub-steps">
+                <li><span class="bullet"></span><code>name == "case_id"</code> → <code>field.text()</code> → String</li>
+                <li><span class="bullet"></span><code>name == "document"</code> → <code>field.bytes()</code> → Vec&lt;u8&gt; + file_name: String</li>
+                <li><span class="bullet"></span>Empty arrays skipped. Multiple documents allowed.</li>
+              </ul>
+              <div class="decision-box" style="background:var(--color-error-highlight);">
+                <span class="decision-icon">🚫</span>
+                <span style="font-size:0.8rem;color:var(--color-error);">Guard: if <code>case_id.is_empty() || documents.is_empty()</code> → return Err immediately</span>
+              </div>
+            </div></div>
+          </div>
+        </div>
+
+        <div class="flow-step t-warning">
+          <div class="flow-step-left"><div class="flow-step-num">2</div><div class="flow-step-line"></div></div>
+          <div class="flow-step-body" onclick="toggleStep(this)">
+            <div class="step-header">
+              <span class="step-tag">EXTRACT</span>
+              <span class="step-title">extract_file_text() — PDF/JSON/OCR dispatch</span>
+              <span class="step-file">main.rs:extract_file_text</span>
+              <svg class="step-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <div class="step-detail"><div class="step-detail-inner">
+              <p class="step-desc">File extension detection (lowercased filename) routes to the appropriate extractor. PDF gets a two-pass strategy — native first, then OCR fallback if the result is under 50 chars.</p>
+              <table class="matrix">
+                <tr><th>Extension</th><th>Strategy</th><th>Fallback</th></tr>
+                <tr><td><span class="badge" style="background:var(--color-blue-highlight);color:var(--color-blue);">.json</span></td><td><code>String::from_utf8(bytes)</code></td><td>None</td></tr>
+                <tr><td><span class="badge" style="background:var(--color-warning-highlight);color:var(--color-warning);">.pdf</span></td><td><code>pdf_extract::extract_text_from_mem()</code></td><td>OCR sidecar if result &lt; 50 chars</td></tr>
+                <tr><td><span class="badge" style="background:var(--color-surface-dynamic);color:var(--color-text-muted);">other</span></td><td>OCR sidecar directly</td><td>Err propagated</td></tr>
+              </table>
+              <div class="detail-section">OCR sidecar call</div>
+              <div class="code-block"><span class="fn">clients::ocr::extract_text_from_bytes</span>(
+    <span class="kw">&</span>state.config.ocr_service_url,  <span class="cm">// http://ocr-service:PORT</span>
+    file_bytes: <span class="tp">Vec&lt;u8&gt;</span>,
+    file_name: <span class="tp">String</span>             <span class="cm">// sent as multipart filename hint</span>
+).<span class="kw">await</span>
+</div>
+            </div></div>
+          </div>
+        </div>
+
+        <div class="flow-step t-purple">
+          <div class="flow-step-left"><div class="flow-step-num">3</div><div class="flow-step-line"></div></div>
+          <div class="flow-step-body" onclick="toggleStep(this)">
+            <div class="step-header">
+              <span class="step-tag">QDRANT</span>
+              <span class="step-title">init_and_embed() — chunk, embed, upsert vectors</span>
+              <span class="step-file">clients/qdrant.rs</span>
+              <svg class="step-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <div class="step-detail"><div class="step-detail-inner">
+              <p class="step-desc">The aggregated text is split by <code>\n\n</code> (paragraph-level chunking). Each chunk is locally embedded using BGESmallENV15 and upserted into Qdrant with UUID point IDs and a payload containing <code>text</code> + <code>case_id</code>. The collection is auto-created if absent.</p>
+              <ul class="sub-steps">
+                <li><span class="bullet"></span>Split <code>aggregated_text</code> by <code>\n\n</code> → <code>Vec&lt;String&gt;</code> chunks</li>
+                <li><span class="bullet"></span>Batch-embed all chunks → <code>Vec&lt;Vec&lt;f32&gt;&gt;</code> (384-dim each)</li>
+                <li><span class="bullet"></span>Each point: <code>{ id: uuid, vector: [..], payload: {text, case_id} }</code></li>
+                <li><span class="bullet"></span><code>UpsertPointsBuilder</code> → atomic upsert (idempotent on re-ingest)</li>
+              </ul>
+            </div></div>
+          </div>
+        </div>
+
+        <div class="flow-step t-blue">
+          <div class="flow-step-left"><div class="flow-step-num">4</div><div class="flow-step-line"></div></div>
+          <div class="flow-step-body" onclick="toggleStep(this)">
+            <div class="step-header">
+              <span class="step-tag">POSTGRES</span>
+              <span class="step-title">save_case() — persist raw text record</span>
+              <span class="step-file">clients/postgres.rs</span>
+              <svg class="step-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <div class="step-detail"><div class="step-detail-inner">
+              <p class="step-desc">A row is inserted/updated in the <code>cases</code> table with <code>case_id</code> (primary key), the full aggregated <code>text</code>, and a timestamp. The adjudication <code>report</code> column is NULL at this point — it gets filled in step 6.</p>
+            </div></div>
+          </div>
+        </div>
+
+        <div class="flow-step t-orange">
+          <div class="flow-step-left"><div class="flow-step-num">5</div><div class="flow-step-line"></div></div>
+          <div class="flow-step-body" onclick="toggleStep(this)">
+            <div class="step-header">
+              <span class="step-tag">PIPELINE</span>
+              <span class="step-title">run_adjudication() — full Dual-Brain pipeline</span>
+              <span class="step-file">agent/pipeline.rs</span>
+              <svg class="step-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <div class="step-detail"><div class="step-detail-inner">
+              <p class="step-desc">This is the most expensive operation. It calls <code>build_grounded_context()</code> (NER + Neo4j + Qdrant global) and then assembles a mega-prompt combining raw document evidence with all three knowledge layers. See the <strong>pipeline.rs</strong> page for full detail.</p>
+              <div class="data-flow">
+                <span class="data-pill" style="background:var(--color-surface-offset);color:var(--color-text-muted);">aggregated_text</span>
+                <span class="arrow-pill">→ grounding →</span>
+                <span class="data-pill" style="background:var(--color-orange-highlight);color:var(--color-orange);">mega_prompt</span>
+                <span class="arrow-pill">→ heavy LLM →</span>
+                <span class="data-pill" style="background:var(--color-gold-highlight);color:var(--color-gold);">final_report JSON</span>
+              </div>
+            </div></div>
+          </div>
+        </div>
+
+        <div class="flow-step t-success">
+          <div class="flow-step-left"><div class="flow-step-num">6</div><div class="flow-step-line"></div></div>
+          <div class="flow-step-body" onclick="toggleStep(this)">
+            <div class="step-header">
+              <span class="step-tag">POSTGRES</span>
+              <span class="step-title">update_case_report() + HTTP 200 with JSON verdict</span>
+              <span class="step-file">clients/postgres.rs → main.rs</span>
+              <svg class="step-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <div class="step-detail"><div class="step-detail-inner">
+              <p class="step-desc">The <code>final_report</code> string (JSON) is written back to the <code>cases</code> table. The same string is returned directly as the HTTP response body with no re-serialization.</p>
+              <div class="code-block"><span class="cm">// JSON verdict shape:</span>
+{
+  <span class="str">"decision"</span>: <span class="str">"APPROVED | REJECTED | MANUAL_REVIEW"</span>,
+  <span class="str">"confidence"</span>: <span class="num">0.0</span>–<span class="num">1.0</span>,
+  <span class="str">"reasoning"</span>: <span class="str">"Detailed synthesis..."</span>,
+  <span class="str">"entities_evaluated"</span>: [<span class="str">"Metformin"</span>, <span class="str">"Type 2 Diabetes"</span>]
+}
+</div>
+            </div></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Retry Adjudication callout (attached to ingest flow) -->
+    <div style="padding:0 1.5rem 2rem;">
+      <div class="decision-box" style="background:var(--color-gold-highlight);border:1.5px solid var(--color-gold);border-radius:12px;padding:1rem 1.25rem;">
+        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.6rem;">
+          <span style="font-size:1.1rem;">&#x21BB;</span>
+          <span style="font-size:0.85rem;font-weight:700;color:var(--color-gold);">Retry Adjudication &mdash; POST /api/cases/:id/readjudicate</span>
+        </div>
+        <p style="font-size:0.8rem;color:var(--color-text-muted);margin:0 0 0.6rem;">Re-runs the full Dual-Brain pipeline for an <em>existing</em> case without re-uploading documents. Reads <code>document_text</code> straight from Postgres, runs NER &rarr; Neo4j &rarr; Qdrant &rarr; LLM, and overwrites <code>adjudication_report</code> in-place. Useful after graph updates or model swaps.</p>
+        <div class="code-block" style="font-size:0.75rem;"><span class="cm"># Re-run adjudication for case-001</span>
+<span class="fn">curl</span> -X POST http://localhost:3000/api/cases/case-001/readjudicate</div>
+        <div style="display:flex;gap:0.5rem;margin-top:0.75rem;flex-wrap:wrap;">
+          <span class="badge" style="background:var(--color-gold-highlight);color:var(--color-gold);">Reads existing document_text from Postgres</span>
+          <span class="badge" style="background:var(--color-orange-highlight);color:var(--color-orange);">Full NER &rarr; Neo4j &rarr; Qdrant &rarr; LLM pipeline</span>
+          <span class="badge" style="background:var(--color-success-highlight);color:var(--color-success);">Overwrites adjudication_report in-place</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- PIPELINE PAGE -->
+
+    <div class="page" id="page-pipeline">
+      <div class="page-title">agent / pipeline.rs</div>
+      <div class="page-sub">The orchestration layer: grounding + heavy LLM strike. Called by both /ingest and /ingest/batch.</div>
+
+      <div class="flow">
+        <div class="flow-step t-purple">
+          <div class="flow-step-left"><div class="flow-step-num">A</div><div class="flow-step-line"></div></div>
+          <div class="flow-step-body" onclick="toggleStep(this)">
+            <div class="step-header">
+              <span class="step-tag">CALL</span>
+              <span class="step-title">build_grounded_context() — assembles full knowledge context</span>
+              <span class="step-file">→ prompt_builder.rs</span>
+              <svg class="step-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <div class="step-detail"><div class="step-detail-inner">
+              <p class="step-desc">Dispatches the document text into the full 4-stage entity resolution + Neo4j + Qdrant pipeline. Returns a pre-formatted multi-section string with three grounding layers: deterministic pathways, depth-1 neighborhood, and BODHI global semantic facts.</p>
+            </div></div>
+          </div>
+        </div>
+        <div class="flow-step t-gold">
+          <div class="flow-step-left"><div class="flow-step-num">B</div><div class="flow-step-line"></div></div>
+          <div class="flow-step-body" onclick="toggleStep(this)">
+            <div class="step-header">
+              <span class="step-tag">ASSEMBLE</span>
+              <span class="step-title">Mega-prompt construction — graph verdicts + raw evidence + grounding</span>
+              <span class="step-file">pipeline.rs:run_adjudication</span>
+              <svg class="step-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <div class="step-detail"><div class="step-detail-inner">
+              <p class="step-desc">Also runs <code>check_medical_necessity</code> for every (diagnosis, drug) pair to produce graph verdicts before calling the LLM. The full context has three layers.</p>
+              <div class="code-block"><span class="kw">let</span> full_context = <span class="fn">format!</span>(
+  <span class="str">"### GRAPH MEDICAL NECESSITY VERDICTS:\n{graph_verdicts}\n\n
+### RAW DOCUMENT EVIDENCE:\n{document_text}\n\n
+{grounded_context}"</span> <span class="cm">// Neo4j pathways + neighborhood + Qdrant BODHI</span>
+);
+</div>
+            </div></div>
+          </div>
+        </div>
+        <div class="flow-step t-teal">
+          <div class="flow-step-left"><div class="flow-step-num">C</div><div class="flow-step-line"></div></div>
+          <div class="flow-step-body" onclick="toggleStep(this)">
+            <div class="step-header">
+              <span class="step-tag">LLM</span>
+              <span class="step-title">generate_adjudication_report() — main_llm (qwen3.5:9B), temp 0.1</span>
+              <span class="step-file">clients/ollama.rs</span>
+              <svg class="step-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <div class="step-detail"><div class="step-detail-inner">
+              <p class="step-desc">Uses <code>main_llm</code> (<code>qwen3.5:9B</code> via local Ollama) with <code>temperature: 0.1</code>, <code>format: json</code>, and <code>num_ctx: 20480</code>. The strict JSON schema is enforced via the system prompt. On error, returns an error JSON object instead of panicking.</p>
+              <div class="decision-box" style="background:var(--color-error-highlight);">
+                <span class="decision-icon">🛡️</span>
+                <span style="font-size:0.8rem;color:var(--color-error);">Error path: <code>{"status":"ERROR","message":"..."}</code> — never crashes the server</span>
+              </div>
+            </div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PROMPT BUILDER PAGE -->
+    <div class="page" id="page-promptbuilder">
+      <div class="page-title">agent / prompt_builder.rs</div>
+      <div class="page-sub">The cognitive engine: NER → 4-stage entity resolution (Postgres prefix → LLM normalize → Postgres re-sweep → BODHI Neo4j bridge) → graph pathways → BODHI global knowledge. Called by both /api/chat and /api/ingest.</div>
+
+      <div class="flow">
+        <div class="flow-step t-teal">
+          <div class="flow-step-left"><div class="flow-step-num">1</div><div class="flow-step-line"></div></div>
+          <div class="flow-step-body" onclick="toggleStep(this)">
+            <div class="step-header">
+              <span class="step-tag">NER</span>
+              <span class="step-title">extract_entities() — LLM-based named entity recognition</span>
+              <span class="step-file">clients/ollama.rs (ner_llm · qwen2.5:3b, temp 0.0)</span>
+              <svg class="step-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <div class="step-detail"><div class="step-detail-inner">
+              <p class="step-desc">The full <code>case.document_text</code> (not RAG chunks) is sent to the local <strong>ner_llm</strong> (<code>qwen2.5:3b</code> via Ollama). A hardened system prompt forces output of exactly <code>{"medications":[],"diagnoses":[]}</code> in JSON mode. Text is truncated to 12,000 chars. A schema-bleed guard detects adjudication keys leaking into the NER response and aborts early.</p>
+              <div class="data-flow">
+                <span class="data-pill" style="background:var(--color-surface-offset);color:var(--color-text-muted);">case.document_text (truncated to 12k)</span>
+                <span class="arrow-pill">→ qwen2.5:3b (Ollama) →</span>
+                <span class="data-pill" style="background:var(--co          <div class="flow-step-left"><div class="flow-step-num">2</div><div class="flow-step-line"></div></div>
+          <div class="flow-step-body" onclick="toggleStep(this)">
+            <div class="step-header">
+              <span class="step-tag">LINK</span>
+              <span class="step-title">linker::resolve_entities() — 4-stage entity resolution pipeline</span>
+              <span class="step-file">knowledge/linker.rs</span>
+              <svg class="step-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <div class="step-detail"><div class="step-detail-inner">
+              <p class="step-desc">Four cascading stages resolve raw OCR terms (e.g. <code>"Pexime-200"</code>, <code>"TYPHOID FEVER"</code>) into stable SNOMED concept IDs for Neo4j. Each stage feeds its unresolved misses forward. Hard failures at Stage 3 are injected as <code>UNKNOWN_DRUG</code> entities and still enter the BODHI bridge at Stage 4.</p>
+
+              <div class="detail-section">Stage 1 — Postgres prefix sweep (<code>search_dictionary_prefix</code>)</div>
+              <p class="step-desc" style="margin-bottom:0.75rem;">Each raw term is queried via <code>ILIKE term%</code> (prefix, not substring). On miss, a <strong>dash-strip fallback</strong> retries: <code>"Pexime-200"</code> strips <code>"-200"</code> → retries <code>"Pexime%"</code>. Prefix prevents false substring matches — e.g. correctly hits <code>Pexime (cefixime) 200mg</code> and rejects <code>Peximer-CR (paroxetine)</code>.</p>
+              <div class="data-flow">
+                <span class="data-pill" style="background:var(--color-surface-offset);color:var(--color-text-muted);">"Pexime-200"</span>
+                <span class="arrow-pill">→ ILIKE Pexime% →</span>
+                <span class="data-pill" style="background:var(--color-primary-highlight);color:var(--color-primary);">Pexime (cefixime) 200mg · snomed_id</span>
+              </div>
+              <div class="decision-box" style="background:var(--color-success-highlight);">
+                <span class="decision-icon">✅</span>
+                <span style="font-size:0.8rem;color:var(--color-success);"><strong>Fast hit or dash-strip hit</strong> → entity pushed to resolved list. Misses accumulate in <code>db_misses</code> for Stage 2.</span>
+              </div>
+
+              <div class="detail-section" style="margin-top:1rem;">Stage 2 — LLM normalization (<code>normalize_terms</code>)</div>
+              <p class="step-desc" style="margin-bottom:0.75rem;">All Stage 1 misses are bulk-sent to <code>slm</code> (<code>qwen2.5:3b</code> via Ollama) in one API call. Maps brand/OCR names to generic INN names. Prompt instructs: strip dose suffixes; return <code>UNKNOWN</code> for truly unmappable terms.</p>
+              <div class="data-flow">
+                <span class="data-pill" style="background:var(--color-surface-offset);color:var(--color-text-muted);">["Pantozen", "Prondem", "TYPHOID FEVER"]</span>
+                <span class="arrow-pill">→ qwen2.5:3b (temp 0.0) →</span>
+                <span class="data-pill" style="background:var(--color-blue-highlight);color:var(--color-blue);">["Pantoprazole", "UNKNOWN", "Typhoid Fever"]</span>
+              </div>
+
+              <div class="detail-section" style="margin-top:1rem;">Stage 3 — Postgres re-sweep (normalized terms)</div>
+              <p class="step-desc" style="margin-bottom:0.75rem;">Each normalized term is re-looked up in Postgres. Terms where LLM returned <code>""</code> or <code>"UNKNOWN"</code> are logged as <strong>Hard Fail</strong>. Diagnoses that miss the dictionary are injected as <strong>BODHI_RESCUE</strong> entries and still enter Stage 4.</p>
+              <div class="decision-box" style="background:var(--color-warning-highlight);">
+                <span class="decision-icon">⚠️</span>
+                <span style="font-size:0.8rem;color:var(--color-warning);"><strong>BODHI_RESCUE:</strong> vocab miss for diagnosis (e.g. <code>"Typhoid Fever"</code> not in NRCES dict) → injected as raw string so Stage 4 bridge still attempts Neo4j resolution.</span>
+              </div>
+
+              <div class="detail-section" style="margin-top:1rem;">Stage 4 — BODHI bridge (<code>resolve_bodhi_snomed_ids</code>)</div>
+              <p class="step-desc" style="margin-bottom:0.75rem;">Substance names, generic names, and rescue diagnoses are sent to Neo4j. Matched against <code>Drug</code>, <code>Concept</code>, <code>Condition</code>, and <code>Symptom</code> node labels. Returns deduplicated SNOMED IDs for <code>fetch_deterministic_pathways</code>.</p>
+              <div class="code-block"><span class="cm">// Stage 4 Cypher — neo4j.rs::resolve_bodhi_snomed_ids</span>
+UNWIND $terms AS term
+OPTIONAL MATCH (d:Drug)         WHERE <span class="kw">toLower</span>(d.name) CONTAINS <span class="kw">toLower</span>(term)
+OPTIONAL MATCH (c:Concept)      WHERE <span class="kw">toLower</span>(c.name) CONTAINS <span class="kw">toLower</span>(term)
+OPTIONAL MATCH (cond:Condition) WHERE <span class="kw">toLower</span>(cond.name) CONTAINS <span class="kw">toLower</span>(term)
+OPTIONAL MATCH (s:Symptom)      WHERE <span class="kw">toLower</span>(s.name) CONTAINS <span class="kw">toLower</span>(term)
+<span class="kw">WITH</span> collect(d.snomed_id) + collect(c.snomed_id) +
+     collect(cond.snomed_id) + collect(s.snomed_id) AS all_ids
+UNWIND all_ids AS sid
+<span class="kw">WITH</span> sid <span class="kw">WHERE</span> sid IS NOT NULL
+<span class="kw">RETURN DISTINCT</span> sid <span class="kw">LIMIT</span> <span class="num">30</span>
+</div>
+              <div class="decision-box" style="background:var(--color-warning-highlight);">
+                <span class="decision-icon">🔄</span>
+                <span style="font-size:0.8rem;color:var(--color-warning);"><strong>Fallback:</strong> if NER returned nothing, keyword sweep scans raw document text against Postgres dictionary (words &gt;6 chars, capped at 10 hits, lab-field tokens filtered)</span>
+              </div>
+            </div></div>
+          </div>
+        </div>
+
+        <div class="flow-step t-teal">
+          <div class="flow-step-left"><div class="flow-step-num">3</div><div class="flow-step-line"></div></div>
+          <div class="flow-step-body" onclick="toggleStep(this)">
+            <div class="step-header">
+              <span class="step-tag">NEO4J</span>
+              <span class="step-title">fetch_deterministic_pathways() — direct edges between case concepts</span>
+              <span class="step-file">clients/neo4j.rs</span>
+              <svg class="step-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <div class="step-detail"><div class="step-detail-inner">
+              <p class="step-desc">Finds directed edges where <strong>both</strong> endpoints have a <code>snomed_id</code> in the resolved BODHI set. Queries across all BODHI node types using <code>snomed_id</code> property (not <code>id</code>). Returns named source/target for prompt rendering.</p>
+              <div class="code-block"><span class="cm">// fetch_deterministic_pathways — neo4j.rs</span>
+UNWIND $ids AS id
+MATCH (a)-[r]->(b)
+WHERE (a:Drug OR a:Concept OR a:Condition OR a:Symptom OR a:LabInvestigation)
+  AND (b:Drug OR b:Concept OR b:Condition OR b:Symptom OR b:LabInvestigation)
+  AND a.snomed_id <span class="kw">IN</span> $ids
+  AND b.snomed_id <span class="kw">IN</span> $ids
+RETURN a.name AS from_name, <span class="fn">type</span>(r) AS rel, b.name AS to_name,
+       a.snomed_id AS from_id, b.snomed_id AS to_id
+<span class="kw">LIMIT</span> <span class="num">100</span>
+</div>
+            </div></div>
+          </div>
+        </div>
+
+        <div class="flow-step t-blue">
+          <div class="flow-step-left"><div class="flow-step-num">4</div><div class="flow-step-line"></div></div>
+          <div class="flow-step-body" onclick="toggleStep(this)">
+            <div class="step-header">
+              <span class="step-tag">NEO4J</span>
+              <span class="step-title">fetch_entity_neighborhood() — depth-1 textbook context</span>
+              <span class="step-file">clients/neo4j.rs</span>
+              <svg class="step-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <div class="step-detail"><div class="step-detail-inner">
+              <p class="step-desc">Finds ALL depth-1 neighbors of any BODHI concept in the resolved set (either direction). Provides the LLM broader clinical context — comorbidities, related drugs, influencing factors. Capped at 50 results, top 15 shown in prompt. Confirmed returning 32 edges for Typhoid fever in production.</p>
+              <div class="code-block"><span class="cm">// fetch_entity_neighborhood — neo4j.rs — depth-1, bidirectional</span>
+UNWIND $ids AS id
+MATCH (a)-[r]-(b)
+WHERE (a:Drug OR a:Concept OR a:Condition OR a:Symptom OR a:LabInvestigation)
+  AND a.snomed_id = id
+RETURN a.name AS center_name, a.snomed_id AS center_id,
+       <span class="fn">type</span>(r) AS rel, b.name AS neighbor_name,
+       b.snomed_id AS neighbor_id, <span class="fn">labels</span>(b) AS neighbor_labels
+<span class="kw">LIMIT</span> <span class="num">50</span>
+</div>
+            </div></div>
+          </div>
+        </div>
+        </div>
+
+        <div class="flow-step t-purple">
+          <div class="flow-step-left"><div class="flow-step-num">5</div><div class="flow-step-line"></div></div>
+          <div class="flow-step-body" onclick="toggleStep(this)">
+            <div class="step-header">
+              <span class="step-tag">QDRANT</span>
+              <span class="step-title">search_global_knowledge() — BODHI semantic facts</span>
+              <span class="step-file">clients/qdrant.rs</span>
+              <svg class="step-toggle" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <div class="step-detail"><div class="step-detail-inner">
+              <p class="step-desc">Constructs query: <code>"Medical facts regarding: &lt;entity1&gt;, &lt;entity2&gt;..."</code>. Embeds it via the <strong>BioLORD embedding sidecar</strong> (Python FastAPI, port 8000, 768-dim) and searches the <code>bodhi_global_knowledge</code> collection — no <code>case_id</code> filter. Returns top-10 facts from the <code>payload["fact"]</code> field (also checks <code>"text"</code> key for resilience). Collection currently has <strong>9,324 points</strong> populated from Bodhi Cypher exports.</p>
+              <div class="data-flow">
+                <span class="data-pill" style="background:var(--color-surface-offset);color:var(--color-text-muted);">entity_names: Vec&lt;String&gt;</span>
+                <span class="arrow-pill">→ BioLORD embed →</span>
+                <span class="data-pill" style="background:var(--color-purple-highlight);color:var(--color-purple);">bodhi_global_knowledge (9,324 pts)</span>
+                <span class="arrow-pill">→</span>
+                <span class="data-pill" style="background:var(--color-success-highlight);color:var(--color-success);">10 medical facts</span>
+              </div>
+              <div class="decision-box" style="background:var(--color-error-highlight);">
+                <span class="decision-icon">🚨</span>
+                <span style="font-size:0.8rem;color:var(--color-error);"><strong>Known issue:</strong> if <code>bodhi_global_knowledge</code> is unpopulated the search returns 0 facts silently. Run <code>data_scripts/seed_from_cypher.py</code> to populate. Payload key must be <code>"fact"</code> (fallback: <code>"text"</code>). Startup log confirms: <code>✅ bodhi_global_knowledge has N points ready</code>.</span>
+              </div>
+            </div></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- APP STATE PAGE -->
+    <div class="page" id="page-appstate">
+      <div class="page-title">AppState — Shared Runtime</div>
+      <div class="page-sub">The single <code>Arc&lt;AppState&gt;</code> injected into every Axum handler via <code>State</code> extractor.</div>
+
+      <div class="state-box">
+        <div class="state-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2.2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 12h6M9 15h4"/></svg>
+          AppState (Clone-able Arc wrapper)
+        </div>
+        <div class="state-fields">
+          <span class="sf-key">config</span><span class="sf-val">Config — env vars: neo4j_uri, qdrant_url, ocr_service_url, pg_url, ollama_url, main_model, slm_model <span class="sf-type">config.rs</span></span>
+          <span class="sf-key">graph</span><span class="sf-val">Arc&lt;neo4rs::Graph&gt; — Bolt connection pool to Neo4j. Shared across all threads. <span class="sf-type">clients/neo4j.rs</span></span>
+          <span class="sf-key">pg_pool</span><span class="sf-val">Arc&lt;deadpool_postgres::Pool&gt; — async Postgres connection pool. <span class="sf-type">clients/postgres.rs</span></span>
+          <span class="sf-key">main_llm</span><span class="sf-val">Arc&lt;dyn AgentClient&gt; → OllamaClient { model: qwen3.5:9B } — chat + adjudication <span class="sf-type">clients/ollama.rs</span></span>
+          <span class="sf-key">slm</span><span class="sf-val">Arc&lt;dyn AgentClient&gt; → OllamaClient { model: qwen2.5:3b } — term normalization <span class="sf-type">clients/ollama.rs</span></span>
+          <span class="sf-key">ner_llm</span><span class="sf-val">Arc&lt;dyn AgentClient&gt; → OllamaClient { model: qwen2.5:3b } — entity extraction <span class="sf-type">clients/ollama.rs</span></span>
+        </div>
+      </div>
+
+      <div class="state-box">
+        <div class="state-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-gold)" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+          Tri-Brain LLM Design — All Local via Ollama
+        </div>
+        <table class="matrix">
+          <tr><th>Handle</th><th>Model</th><th>Backend</th><th>Used for</th></tr>
+          <tr><td><code>main_llm</code></td><td><span style="color:var(--color-gold);font-weight:700;">qwen3.5:9B</span></td><td>Ollama (local)</td><td>Chat answers, adjudication report generation</td></tr>
+          <tr><td><code>slm</code></td><td>qwen2.5:3b</td><td>Ollama (local)</td><td>Term normalization — bulk API call, speed-critical</td></tr>
+          <tr><td><code>ner_llm</code></td><td>qwen2.5:3b</td><td>Ollama (local)</td><td>Named entity recognition from case documents</td></tr>
+        </table>
+        <div class="decision-box" style="background:var(--color-primary-highlight);margin-top:0.5rem;">
+          <span class="decision-icon">💡</span>
+          <span style="font-size:0.8rem;color:var(--color-primary);">Model selection driven by <code>MAIN_LLM_MODEL</code> and <code>SLM_MODEL</code> env vars — change in <code>.env</code> without recompiling. Groq is no longer used but the <code>GroqClient</code> struct remains available.</span>
+        </div>
+      </div>
+
+      <div class="state-box">
+        <div class="state-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-blue)" stroke-width="2.2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          API Routes
+        </div>
+        <table class="matrix">
+          <tr><th>Route</th><th>Method</th><th>Handler</th><th>Body</th></tr>
+          <tr><td>/api/health</td><td>GET</td><td>inline closure</td><td>none</td></tr>
+          <tr><td>/api/ingest</td><td>POST</td><td>handle_ingest</td><td>multipart/form-data</td></tr>
+          <tr><td>/api/ingest/batch</td><td>POST</td><td>handle_ingest_batch</td><td>multipart/form-data</td></tr>
+          <tr><td>/api/chat</td><td>POST</td><td>handle_chat</td><td>JSON {case_id, query}</td></tr>
+          <tr style="background:var(--color-blue-highlight);"><td colspan="4" style="font-weight:700;color:var(--color-blue);font-size:0.75rem;letter-spacing:0.05em;">── CASE CRUD ──────────────────────────────────────────────────</td></tr>
+          <tr><td>/api/cases</td><td>GET</td><td>handle_list_cases</td><td>none</td></tr>
+          <tr><td>/api/cases/:id</td><td>GET</td><td>handle_get_case</td><td>path param</td></tr>
+          <tr><td>/api/cases/:id</td><td>PUT</td><td>handle_update_case_text</td><td>JSON {document_text}</td></tr>
+          <tr><td>/api/cases/:id</td><td>DELETE</td><td>handle_delete_case</td><td>path param</td></tr>
+          <tr style="background:var(--color-gold-highlight);"><td colspan="4" style="font-weight:700;color:var(--color-gold);font-size:0.75rem;letter-spacing:0.05em;">── ADJUDICATION ───────────────────────────────────────────────</td></tr>
+          <tr><td>/api/cases/:id/readjudicate</td><td>POST</td><td>handle_readjudicate</td><td>none (uses stored text)</td></tr>
+          <tr style="background:var(--color-primary-highlight);"><td colspan="4" style="font-weight:700;color:var(--color-primary);font-size:0.75rem;letter-spacing:0.05em;">── CHAT HISTORY ───────────────────────────────────────────────</td></tr>
+          <tr><td>/api/cases/:id/history</td><td>GET</td><td>handle_get_history</td><td>?limit=50&amp;before_id=</td></tr>
+          <tr><td>/api/cases/:id/history</td><td>DELETE</td><td>handle_clear_history</td><td>none</td></tr>
+          <tr><td>/api/messages/:msg_id</td><td>DELETE</td><td>handle_delete_message</td><td>path param (i64)</td></tr>
+          <tr style="background:var(--color-surface-offset);"><td colspan="4" style="font-weight:700;color:var(--color-text-muted);font-size:0.75rem;letter-spacing:0.05em;">── STATIC ─────────────────────────────────────────────────────</td></tr>
+          <tr><td>/*</td><td>fallback</td><td>ServeDir("public")</td><td>static files</td></tr>
+        </table>
+      </div>
+
+      <div class="state-box" style="border: 2px solid var(--color-blue);">
+        <div class="state-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-blue)" stroke-width="2.2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          Comprehensive Data Schema &amp; Tech Stack
+        </div>
+        <p style="font-size:0.8rem;color:var(--color-text-muted);margin-bottom:1.5rem;">The project leverages a "Tri-Engine" data strategy combining Relational, Graph, and Vector stores to achieve clinical grounding.</p>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;">
+          <div>
+            <h4 style="color:var(--color-blue);margin-bottom:0.5rem;font-size:0.9rem;">🐘 Postgres (Relational &amp; Search)</h4>
+            <div class="code-block" style="font-size:0.7rem;line-height:1.4;">
+<span class="cm">-- Case management &amp; Adjudication</span>
+<span class="fn">CREATE TABLE</span> cases (
+  case_id <span class="cm">TEXT PRIMARY KEY</span>,
+  document_text <span class="cm">TEXT</span>,
+  adjudication_report <span class="cm">JSONB</span>,
+  created_at <span class="cm">TIMESTAMPTZ DEFAULT NOW()</span>
+);
+
+<span class="cm">-- Persistent Chat History</span>
+<span class="fn">CREATE TABLE</span> chat_messages (
+  id <span class="cm">BIGSERIAL PRIMARY KEY</span>,
+  case_id <span class="cm">TEXT REFERENCES cases(case_id)</span>,
+  role <span class="cm">TEXT</span>, <span class="cm">-- 'user' | 'assistant'</span>
+  content <span class="cm">TEXT</span>,
+  created_at <span class="cm">TIMESTAMPTZ DEFAULT NOW()</span>
+);
+
+<span class="cm">-- Dictionary (NRCES/SNOMED Mapping)</span>
+<span class="fn">CREATE TABLE</span> dictionary (
+  concept_id <span class="cm">TEXT</span>, snomed_id <span class="cm">TEXT</span>,
+  term_type <span class="cm">TEXT</span>, name <span class="cm">TEXT</span>,
+  substance_name <span class="cm">TEXT</span>, generic_name <span class="cm">TEXT</span>,
+  indication <span class="cm">TEXT</span>, interaction_with_drugs <span class="cm">TEXT</span>
+);
+            </div>
+          </div>
+
+          <div>
+            <h4 style="color:var(--color-primary);margin-bottom:0.5rem;font-size:0.9rem;">🕸️ Neo4j (BODHI Graph)</h4>
+            <div class="code-block" style="font-size:0.7rem;line-height:1.4;">
+<span class="cm">// Node Labels</span>
+- <span class="fn">(:Drug)</span> {snomed_id, name, synonyms}
+- <span class="fn">(:Concept)</span> {snomed_id, name, display_name}
+- <span class="fn">(:Condition)</span> {snomed_id, name}
+- <span class="fn">(:Symptom)</span> {snomed_id, name}
+- <span class="fn">(:LabInvestigation)</span> {snomed_id, name}
+
+<span class="cm">// Relationships</span>
+- <span class="fn">[:IMPACTS]</span> (Drug &rarr; Concept)
+- <span class="fn">[:INDICATED_FOR]</span> (Drug &rarr; Condition)
+- <span class="fn">[:CONTRAINDICATED_WITH]</span> (Drug &rarr; Condition)
+- <span class="fn">[:HAS_SYMPTOM]</span> (Condition &rarr; Symptom)
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:1.5rem;display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;">
+          <div>
+            <h4 style="color:var(--color-orange);margin-bottom:0.5rem;font-size:0.9rem;">🧿 Qdrant (BODHI Vector)</h4>
+            <div class="code-block" style="font-size:0.7rem;line-height:1.4;">
+<span class="cm">// Collection: clinical_cases (Local RAG)</span>
+- <span class="fn">Payload</span>: { "text": string, "case_id": string }
+- <span class="fn">Index</span>: Cosine, 768-dim (BioLord)
+
+<span class="cm">// Collection: bodhi_global_knowledge (Global RAG)</span>
+- <span class="fn">Payload</span>: { "fact": string }
+- <span class="fn">Index</span>: Cosine, 768-dim (BioLord)
+            </div>
+          </div>
+
+          <div>
+            <h4 style="color:var(--color-gold);margin-bottom:0.5rem;font-size:0.9rem;">🛠️ Technology Stack</h4>
+            <ul style="font-size:0.8rem;color:var(--color-text-muted);list-style:none;padding:0;">
+              <li style="margin-bottom:0.4rem;"><strong style="color:var(--color-text);">Backend:</strong> Rust 1.75+ (Axum, Tokio)</li>
+              <li style="margin-bottom:0.4rem;"><strong style="color:var(--color-text);">Databases:</strong> Postgres (deadpool), Neo4j (neo4rs), Qdrant</li>
+              <li style="margin-bottom:0.4rem;"><strong style="color:var(--color-text);">Embedding:</strong> BioLord (768-dim) via local/remote encoder</li>
+              <li style="margin-bottom:0.4rem;"><strong style="color:var(--color-text);">LLMs:</strong> Tri-Brain (Main: Qwen 9B, SLM: Qwen 3B, NER: Qwen 3B)</li>
+              <li style="margin-bottom:0.4rem;"><strong style="color:var(--color-text);">Grounding:</strong> Dual-Brain GraphRAG (Grounding + Pathways)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// Theme toggle
+(function(){
+  const t=document.querySelector('[data-theme-toggle]'),r=document.documentElement;
+  let d=matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';
+  r.setAttribute('data-theme',d);
+  t&&t.addEventListener('click',()=>{
+    d=d==='dark'?'light':'dark';
+    r.setAttribute('data-theme',d);
+    t.innerHTML=d==='dark'
+      ?'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>'
+      :'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+  });
+})();
+
+function showPage(id){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n=>{
+    if(n.textContent.trim().includes(id)||
+       (id==='overview'&&n.textContent.trim().includes('Overview'))||
+       (id==='chat'&&n.textContent.trim().includes('/api/chat'))||
+       (id==='ingest'&&n.textContent.trim().includes('/api/ingest'))||
+       (id==='pipeline'&&n.textContent.trim().includes('pipeline'))||
+       (id==='promptbuilder'&&n.textContent.trim().includes('prompt_builder'))||
+       (id==='appstate'&&n.textContent.trim().includes('AppState'))
+    ) n.classList.add('active');
+  });
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function toggleStep(el){
+  el.classList.toggle('expanded');
+}
+</script>
+</body>
+</html>

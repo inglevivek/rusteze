@@ -1,0 +1,70 @@
+{
+  "patient_summary": {
+    "age": 42,
+    "gender": "female",
+    "admission_date": "2026-04-06T22:10",
+    "discharge_date": "2026-04-08",
+    "history": "recent hospitalization for enterocolitis in March 2026",
+    "presentation": "15–20 episodes of loose watery stools, persistent vomiting (7–8 times), abdominal pain, severe generalized weakness",
+    "physical_examination": {
+      "dehydration_grade": "++",
+      "blood_pressure_at_admission": "80/60 mmHg",
+      "symptoms": ["cold extremities", "severe dehydration", "hypotensive shock"]
+    },
+    "investigations": {
+      "wbc_count": "10100/cumm",
+      "serum_creatinine": "0.6 mg/dL",
+      "random_blood_sugar": "98 mg/dL",
+      "immunology": {
+        "ANA": "negative",
+        "HIV": "negative"
+      },
+      "usg_findings": ["enteritis", "colitis", "gastritis"]
+    },
+    "medications_inpatient": [
+      "Inj. Mocef (2gm BD)",
+      "Inj. Metrogyl"
+    ],
+    "medications_discharge": [
+      "Tab Oflox OZ",
+      "Tab Pantocid DSR",
+      "Tab Pregalin M",
+      "Tab Sporolac DS"
+    ]
+  },
+  "key_decisions": [
+    {
+      "decision": "In-patient Hospitalization",
+      "reason": "Severe dehydration and hemodynamic instability (hypotension) requiring intensive monitoring and IV therapy.",
+      "evidence": [
+        {
+          "doc_id": "Discharge_Summary.pdf",
+          "page": 1,
+          "extract": "BP 80/60 MMHG... I/E- DEHYDRATION ++"
+        }
+      ]
+    },
+    {
+      "decision": "Aggressive IV Fluid Resuscitation and Antibiotics.",
+      "reason": "Immediate clinical need to stabilize blood pressure and manage suspected infectious enterocolitis.",
+      "evidence": [
+        {
+          "doc_id": "IPD papers.pdf",
+          "page": 8,
+          "extract": "INJ MOCEF (2GM) IV BD INJ METROGYL (100) IV TDS"
+        }
+      ]
+    },
+    {
+      "decision": "Specialist Gastroenterology Consultation.",
+      "reason": "Recurrence of enterocolitis symptoms within a single month.",
+      "evidence": [
+        {
+          "doc_id": "IPD papers.pdf",
+          "page": 2,
+          "extract": "Repeated AGE 2 episode in a month"
+        }
+      ]
+    }
+  ]
+}
