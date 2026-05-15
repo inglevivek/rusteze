@@ -162,7 +162,15 @@ pub async fn fetch_deterministic_pathways(
     ";
 
     tracing::info!(
-        "┌── [Neo4j ▶ SEND] fetch_deterministic_pathways ─────────────\n│  Cypher: MATCH (a)-[*1..8]->(b) WHERE both ends IN ids\n│  Params: ids={:?}\n└────────────────────────────────────────────────────────────",
+        "┌── [Neo4j ▶ SEND] fetch_deterministic_pathways ─────────────\n\
+         │  Cypher:\n\
+         │    UNWIND $ids AS id\n\
+         │    MATCH p = (a)-[*1..8]->(b)\n\
+         │    WHERE a.snomed_id IN $ids AND b.snomed_id IN $ids AND a <> b\n\
+         │    UNWIND relationships(p) AS r\n\
+         │    RETURN src.name, type(r), tgt.name, src.snomed_id, tgt.snomed_id LIMIT 100\n\
+         │  Params: ids={:?}\n\
+         └────────────────────────────────────────────────────────────",
         concept_ids
     );
 
@@ -172,28 +180,32 @@ pub async fn fetch_deterministic_pathways(
         .map_err(|e| e.to_string())?;
 
     let mut pathways = Vec::new();
+    let mut pathway_display: Vec<String> = Vec::new();
     while let Ok(Some(row)) = result.next().await {
-        let source: String = row.get("from_id").unwrap_or_default();
-        let relation: String = row.get("rel").unwrap_or_default();
-        let target: String = row.get("to_id").unwrap_or_default();
+        let source: String      = row.get("from_id").unwrap_or_default();
+        let relation: String    = row.get("rel").unwrap_or_default();
+        let target: String      = row.get("to_id").unwrap_or_default();
+        let from_name: String   = row.get("from_name").unwrap_or_default();
+        let to_name: String     = row.get("to_name").unwrap_or_default();
+        pathway_display.push(format!("[{}] -[{}]-> [{}]", from_name, relation, to_name));
         pathways.push((source, relation, target));
     }
 
     if pathways.is_empty() {
         tracing::warn!(
-            "└── [Neo4j ◀ RECV] fetch_deterministic_pathways ─────────────\n│  ⚠️  0 pathways found for ids={:?}\n└────────────────────────────────────────────────────────────",
+            "└── [Neo4j ◀ RECV] fetch_deterministic_pathways ─────────────\n\
+             │  ⚠️  0 pathways found for ids={:?}\n\
+             └────────────────────────────────────────────────────────────",
             concept_ids
         );
     } else {
-        let preview: Vec<String> = pathways
-            .iter()
-            .take(5)
-            .map(|(s, r, t)| format!("({}) -[{}]-> ({})", s, r, t))
-            .collect();
         tracing::info!(
-            "└── [Neo4j ◀ RECV] fetch_deterministic_pathways ─────────────\n│  ✅ {} pathway(s) found\n│  Sample: {}\n└────────────────────────────────────────────────────────────",
+            "└── [Neo4j ◀ RECV] fetch_deterministic_pathways ─────────────\n\
+             │  ✅ {} pathway(s) found\n\
+             │  {}\n\
+             └────────────────────────────────────────────────────────────",
             pathways.len(),
-            preview.join("\n│         ")
+            pathway_display.iter().take(10).cloned().collect::<Vec<_>>().join("\n│  ")
         );
     }
 
@@ -225,7 +237,14 @@ pub async fn fetch_entity_neighborhood(
     ";
 
     tracing::info!(
-        "┌── [Neo4j ▶ SEND] fetch_entity_neighborhood ────────────────\n│  Cypher: MATCH (a)-[*1..8]-(b) WHERE a.snomed_id IN ids LIMIT 50\n│  Params: ids={:?}\n└────────────────────────────────────────────────────────────",
+        "┌── [Neo4j ▶ SEND] fetch_entity_neighborhood ────────────────\n\
+         │  Cypher:\n\
+         │    UNWIND $ids AS id\n\
+         │    MATCH p = (a)-[r*1..8]-(b) WHERE a.snomed_id = id\n\
+         │    UNWIND relationships(p) AS edge\n\
+         │    RETURN src.name, type(edge), tgt.name, src.snomed_id, tgt.snomed_id LIMIT 50\n\
+         │  Params: ids={:?}\n\
+         └────────────────────────────────────────────────────────────",
         concept_ids
     );
 
@@ -252,13 +271,16 @@ pub async fn fetch_entity_neighborhood(
     } else {
         let preview: Vec<String> = neighborhood
             .iter()
-            .take(5)
+            .take(10)
             .map(|(_, rel, _, src, tgt)| format!("[{}] --{}-- [{}]", src, rel, tgt))
             .collect();
         tracing::info!(
-            "└── [Neo4j ◀ RECV] fetch_entity_neighborhood ────────────────\n│  ✅ {} neighbor edge(s) found\n│  Sample: {}\n└────────────────────────────────────────────────────────────",
+            "└── [Neo4j ◀ RECV] fetch_entity_neighborhood ────────────────\n\
+             │  ✅ {} neighbor edge(s) found\n\
+             │  {}\n\
+             └────────────────────────────────────────────────────────────",
             neighborhood.len(),
-            preview.join("\n│         ")
+            preview.join("\n│  ")
         );
     }
 

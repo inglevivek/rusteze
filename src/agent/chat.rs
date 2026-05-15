@@ -15,32 +15,49 @@ pub async fn process_chat(
     case: crate::clients::postgres::Case,
     query: String,
 ) -> String {
-    // Guard: detect if the caller accidentally passed a massive/junk string, 
-    // but allow legitimate large clinical documents (up to 100k chars).
     if query.len() > 100000 {
         tracing::error!(
-            "[Chat] ❌ INVALID QUERY: received oversized string as user query. \
-             len={} preview='{}...'",
-            query.len(),
-            &query[..query.len().min(120)]
+            "[Chat] ❌ INVALID QUERY: oversized string rejected. len={}",
+            query.len()
         );
         return "Internal error: query string is too large.".to_string();
     }
 
     let case_id = &case.case_id;
-    tracing::info!("[Chat] Searching context for Case ID: {}", case_id);
+    let query_preview = &query[..query.len().min(80)];
 
-    let case_context = match qdrant::search_case_context(&config.qdrant_url, &config.embedding_url, &query, &case_id, 15).await {
-        Ok(ctx) => ctx,
+    tracing::info!(
+        "╔══ [Chat] Processing ══════════════════════════════════════╗\n  \
+         case_id : {}\n  \
+         query   : {}{}",
+        case_id,
+        query_preview,
+        if query.len() > 80 { "…" } else { "" }
+    );
+
+    // Step 1: Qdrant case-specific retrieval
+    let case_context = match qdrant::search_case_context(
+        &config.qdrant_url,
+        &config.embedding_url,
+        &query,
+        case_id,
+        15,
+    )
+    .await
+    {
+        Ok(ctx) => {
+            let chunks = ctx.lines().count();
+            tracing::info!("  ├─ [Qdrant] case context   : {} chunks retrieved", chunks);
+            ctx
+        }
         Err(e) => {
-            tracing::error!("Qdrant search failed: {}", e);
-            "".to_string()
+            tracing::warn!("  ├─ [Qdrant] case context   : ❌ FAILED ({})", e);
+            String::new()
         }
     };
     let case_context_split: Vec<String> = case_context.lines().map(|s| s.to_string()).collect();
 
-
-
+    // Step 2: Global grounding (Bodhi + Neo4j)
     let grounded_context = build_grounded_context(
         ner_llm.clone(),
         slm.clone(),
@@ -53,22 +70,42 @@ pub async fn process_chat(
     )
     .await;
 
-    // 3. Build the System Prompt with both local RAG context and global graph grounding
+    tracing::info!(
+        "  ├─ [Bodhi+Neo4j] grounding : {} lines",
+        grounded_context.lines().count()
+    );
+
+    // Step 3: Build system prompt and fire LLM
     let system_prompt = format!(
         "You are a clinical AI assistant analyzing patient case data. \
         Use the following context extracted from the patient's medical records to answer the query. \
-        If the answer is not in the context, state that clearly. Do not hallucinate external medical history.\n\n\
+        If the answer is not in the context, state that clearly. \
+        Do not hallucinate external medical history.\n\n\
         ### PATIENT CONTEXT (Case ID: {}):\n{}\n\n\
         ### GLOBAL KNOWLEDGE GROUNDING:\n{}",
         case_id, case_context, grounded_context
     );
 
-    // 4. Fire at the LLM
     match main_llm.chat_with_context(&system_prompt, &query).await {
         Ok(response) => {
-            format!("{}\n\n---\n**Grounding Context (Neo4j + BODHI):**\n{}", response, grounded_context)
-        },
-        Err(e) => format!("Error communicating with LLM: {}", e),
+            tracing::info!(
+                "  └─ [LLM] response          : {} chars\n\
+                 ╚════════════════════════════════════════════════════════════╝",
+                response.len()
+            );
+            format!(
+                "{}\n\n---\n**Grounding Context (Neo4j + BODHI):**\n{}",
+                response, grounded_context
+            )
+        }
+        Err(e) => {
+            tracing::error!(
+                "  └─ [Chat] ❌ LLM failed: {}\n\
+                 ╚════════════════════════════════════════════════════════════╝",
+                e
+            );
+            format!("Error communicating with LLM: {}", e)
+        }
     }
 }
 

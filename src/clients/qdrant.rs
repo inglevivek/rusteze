@@ -150,11 +150,15 @@ pub async fn search_case_context(
     limit: u64,
 ) -> Result<String, Box<dyn Error + Send + Sync>> {
     tracing::info!(
-        "┌── [Qdrant ▶ SEND] search_case_context ─────────────────────\n│  collection='{}' case_id='{}' limit={}\n│  query: {:?}\n└────────────────────────────────────────────────────────────",
+        "┌── [Qdrant ▶ SEND] search_case_context ─────────────────────\n\
+         │  collection='{}' case_id='{}' limit={}\n\
+         │  query: \"{}{}\"\n\
+         └────────────────────────────────────────────────────────────",
         COLLECTION_NAME,
         case_id,
         limit,
-        query
+        &query[..query.len().min(120)],
+        if query.len() > 120 { "…" } else { "" }
     );
 
     let client = Qdrant::from_url(qdrant_url).build()?;
@@ -207,9 +211,13 @@ pub async fn search_global_knowledge(
     limit: u64,
 ) -> Result<String, Box<dyn Error + Send + Sync>> {
     tracing::info!(
-        "┌── [Qdrant ▶ SEND] search_global_knowledge ─────────────────\n│  collection='bodhi_global_knowledge' limit={}\n│  query: {:?}\n└────────────────────────────────────────────────────────────",
+        "┌── [Qdrant ▶ SEND] search_global_knowledge ─────────────────\n\
+         │  collection='bodhi_global_knowledge' limit={}\n\
+         │  query: \"{}{}\"\n\
+         └────────────────────────────────────────────────────────────",
         limit,
-        query
+        &query[..query.len().min(120)],
+        if query.len() > 120 { "…" } else { "" }
     );
 
     let client = Qdrant::from_url(qdrant_url).build()?;

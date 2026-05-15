@@ -36,7 +36,6 @@ pub async fn build_grounded_context(
     embedding_url: &str,
     _rag_chunks: &[String], // Kept for signature but NER uses case.document_text
 ) -> String {
-    tracing::info!("[PromptBuilder] Starting context build...");
 
     // 1. NER: extract medications and diagnoses from the FULL document
     // NER always runs on the complete case document, not just retrieved chunks.
@@ -176,10 +175,6 @@ pub async fn build_grounded_context(
             .into_iter()
             .collect();
 
-        tracing::info!(
-            "[PromptBuilder] Keyword sweep: {} candidate terms after filtering",
-            candidate_terms.len()
-        );
 
         let mut sweep_entities: Vec<crate::clients::postgres::ClinicalEntity> = Vec::new();
         for term in &candidate_terms {
@@ -256,11 +251,6 @@ pub async fn build_grounded_context(
     let mut neo4j_context = String::new();
 
     if !bodhi_snomed_ids.is_empty() {
-        tracing::info!(
-            "[PromptBuilder] Firing Neo4j with {} BODHI snomed_ids: {:?}",
-            bodhi_snomed_ids.len(),
-            bodhi_snomed_ids
-        );
 
         // 4. Deterministic pathways: direct edges between the case's own concepts
         match neo4j::fetch_deterministic_pathways(&graph, bodhi_snomed_ids.clone()).await {
@@ -306,6 +296,13 @@ pub async fn build_grounded_context(
     } else {
         "Semantic context unavailable.".to_string()
     };
+    tracing::info!(
+        "  ├─ [PromptBuilder] entities={} bodhi_ids={} neo4j_lines={} qdrant_available={}",
+        entity_names.len(),
+        bodhi_snomed_ids.len(),
+        neo4j_context.lines().count(),
+        !qdrant_context.contains("unavailable")
+    );
 
     format!(
         "{}### SEMANTIC MEDICAL TRUTH (BODHI):\n{}\n",

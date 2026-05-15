@@ -32,6 +32,26 @@ struct ChatRequest {
     query: String,
 }
 
+fn build_client(
+    provider: &str,
+    ollama_url: &str,
+    ollama_model: &str,
+    groq_api_key: &str,
+    groq_model: &str,
+) -> Arc<dyn AgentClient> {
+    match provider {
+        "groq" => Arc::new(GroqClient {
+            api_key:     groq_api_key.to_string(),
+            fast_model:  groq_model.to_string(),
+            heavy_model: groq_model.to_string(),
+        }),
+        _ => Arc::new(OllamaClient {
+            base_url: ollama_url.to_string(),
+            model:    ollama_model.to_string(),
+        }),
+    }
+}
+
 fn main() {
     tracing_subscriber::fmt::init();
 
@@ -79,20 +99,23 @@ async fn async_main() {
     //     .spawn()
     //     .map_err(|e| tracing::warn!("Failed to start Ollama automatically: {}", e));
 
-    let main_llm = Arc::new(OllamaClient {
-        base_url: cfg.ollama_url.clone(),
-        model: cfg.main_model.clone(),
-    });
+    let main_llm = build_client(
+        &cfg.main_llm_provider,
+        &cfg.ollama_url, &cfg.main_model,
+        &cfg.groq_api_key, &cfg.main_model,
+    );
 
-    let slm = Arc::new(OllamaClient {
-        base_url: cfg.ollama_url.clone(),
-        model: cfg.slm_model.clone(),
-    });
+    let slm = build_client(
+        &cfg.slm_provider,
+        &cfg.ollama_url, &cfg.slm_model,
+        &cfg.groq_api_key, &cfg.slm_model,
+    );
 
-    let ner_llm = Arc::new(OllamaClient {
-        base_url: cfg.ollama_url.clone(),
-        model: cfg.slm_model.clone(),
-    });
+    let ner_llm = build_client(
+        &cfg.ner_llm_provider,
+        &cfg.ollama_url, &cfg.ner_model,
+        &cfg.groq_api_key, &cfg.ner_model,
+    );
 
     // Verify bodhi_global_knowledge is populated at startup
     match crate::clients::qdrant::count_collection_points(&cfg.qdrant_url, "bodhi_global_knowledge").await {

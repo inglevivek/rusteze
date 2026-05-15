@@ -1,4 +1,3 @@
-// In src/config.rs
 use std::env;
 
 #[derive(Clone)]
@@ -13,22 +12,27 @@ pub struct Config {
     pub embedding_vector_size: usize,
     pub embedding_url: String,
     pub ollama_url: String,
+
     pub main_model: String,
     pub slm_model: String,
+    pub ner_model: String,
+
+    pub main_llm_provider: String,
+    pub slm_provider: String,
+    pub ner_llm_provider: String,
 }
 
 impl Config {
     pub fn load() -> Self {
         dotenvy::dotenv().ok();
-
         Self {
-            neo4j_uri: env::var("NEO4J_URI").expect("NEO4J_URI must be set"),
-            neo4j_user: env::var("NEO4J_USER").expect("NEO4J_USER must be set"),
-            neo4j_pass: env::var("NEO4J_PASS").expect("NEO4J_PASS must be set"),
-            qdrant_url: env::var("QDRANT_URL").expect("QDRANT_URL must be set"),
+            neo4j_uri:       env::var("NEO4J_URI").expect("NEO4J_URI must be set"),
+            neo4j_user:      env::var("NEO4J_USER").expect("NEO4J_USER must be set"),
+            neo4j_pass:      env::var("NEO4J_PASS").expect("NEO4J_PASS must be set"),
+            qdrant_url:      env::var("QDRANT_URL").expect("QDRANT_URL must be set"),
             ocr_service_url: env::var("OCR_URL").expect("OCR_URL must be set"),
-            groq_api_key: env::var("GROQ_API_KEY").unwrap_or_else(|_| "placeholder".to_string()),
-            pg_url: env::var("PG_URL").unwrap_or_else(|_| {
+            groq_api_key:    env::var("GROQ_API_KEY").unwrap_or_else(|_| "placeholder".to_string()),
+            pg_url:          env::var("PG_URL").unwrap_or_else(|_| {
                 "postgres://d3admin:graphbench2026@localhost:5432/nrces_dict".to_string()
             }),
             embedding_vector_size: env::var("EMBEDDING_VECTOR_SIZE")
@@ -39,8 +43,14 @@ impl Config {
                 .unwrap_or_else(|_| "http://127.0.0.1:8000".to_string()),
             ollama_url: env::var("OLLAMA_URL")
                 .unwrap_or_else(|_| "http://127.0.0.1:11434".to_string()),
-            main_model: env::var("MAIN_LLM_MODEL").unwrap_or_else(|_| "qwen3.5:9B".to_string()),
-            slm_model: env::var("SLM_MODEL").unwrap_or_else(|_| "qwen2.5:3b".to_string()),
+
+            main_model: env::var("MAIN_LLM_MODEL").unwrap_or_else(|_| "qwen2.5:9b".to_string()),
+            slm_model:  env::var("SLM_MODEL").unwrap_or_else(|_| "qwen2.5:3b".to_string()),
+            ner_model:  env::var("NER_MODEL").unwrap_or_else(|_| "qwen2.5:3b".to_string()),
+
+            main_llm_provider: env::var("MAIN_LLM_PROVIDER").unwrap_or_else(|_| "ollama".to_string()),
+            slm_provider:      env::var("SLM_PROVIDER").unwrap_or_else(|_| "ollama".to_string()),
+            ner_llm_provider:  env::var("NER_LLM_PROVIDER").unwrap_or_else(|_| "ollama".to_string()),
         }
     }
 }
