@@ -1,30 +1,22 @@
-use d3_graph_bench::{agent, clients, config};
+use d3_graph_bench::{agent, clients, config, AppState};
 
 use axum::{
     extract::{Json, Multipart, Path, Query, State},
     routing::{get, post},
     Router,
 };
-use deadpool_postgres::Pool;
-use neo4rs::Graph;
 use serde::Deserialize;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tower_http::services::ServeDir;
+use tokio_util::sync::CancellationToken;
 
 use clients::agentic::AgentClient;
 use clients::groq::GroqClient;
 use clients::ollama::OllamaClient;
+use rig::providers::openai::Client as RigOpenAIClient;
+use qdrant_client::Qdrant;
 
-#[derive(Clone)]
-struct AppState {
-    config: config::Config,
-    graph: Arc<Graph>,
-    pg_pool: Arc<Pool>,
-    main_llm: Arc<dyn AgentClient>,
-    slm: Arc<dyn AgentClient>,
-    ner_llm: Arc<dyn AgentClient>,
-}
 
 #[derive(Deserialize)]
 struct ChatRequest {
@@ -117,7 +109,16 @@ async fn async_main() {
         &cfg.groq_api_key, &cfg.ner_model,
     );
 
-    // Verify bodhi_global_knowledge is populated at startup
+    let openai_client = Arc::new(RigOpenAIClient::new("dummy").expect("Failed to create Rig OpenAI client"));
+    let qdrant_client = Arc::new(Qdrant::from_url(&cfg.qdrant_url).build().expect("Failed to create Qdrant client"));
+    let pipeline_bus = Arc::new(d3_graph_bench::pipeline::bus::PipelineEventBus::new(1024));
+    
+    // sqlx pool for Phase 7 Telemetry Sink
+    let sqlx_pool = Arc::new(sqlx::PgPool::connect(&cfg.pg_url).await.expect("Failed to connect to PostgreSQL via sqlx"));
+    
+    let sink = d3_graph_bench::pipeline::sink::BatchedTelemetrySink::new(pipeline_bus.clone(), sqlx_pool.clone());
+    sink.spawn_listener();
+
     match crate::clients::qdrant::count_collection_points(&cfg.qdrant_url, "bodhi_global_knowledge").await {
         Ok(n) if n == 0 => tracing::error!(
             "❌ [Startup] bodhi_global_knowledge collection has 0 points. \
@@ -130,14 +131,40 @@ async fn async_main() {
 
     let shared_state = Arc::new(AppState {
         config: cfg,
-        graph: graph_pool,
+        neo4j_client: graph_pool,
         pg_pool: Arc::new(pg_pool),
         main_llm,
         slm,
         ner_llm,
+        openai_client,
+        qdrant_client,
+        pipeline_bus,
+        sqlx_pool: sqlx_pool.clone(),
     });
 
+    // Lifecycle Management (Phase 9)
+    let cancel_token = CancellationToken::new();
+
+    // Durable Queue Workers (Phase 8 & 9)
+    let orchestrator = Arc::new(d3_graph_bench::pipeline::orchestrator::DagOrchestrator::new(
+        shared_state.pipeline_bus.clone(),
+        shared_state.clone(),
+    ));
+    d3_graph_bench::pipeline::queue::JobWorker::spawn_workers(
+        4, 
+        sqlx_pool.clone(), 
+        orchestrator, 
+        cancel_token.clone()
+    );
+
+    // Zombie Job Sweeper (Phase 9)
+    d3_graph_bench::pipeline::queue::ZombieSweeper::spawn(
+        sqlx_pool.clone(), 
+        cancel_token.clone()
+    );
+
     let app = Router::new()
+        .merge(d3_graph_bench::api::pipeline::pipeline_routes())
         .route("/api/health", get(|| async { "D3-GraphBench Engine Live" }))
         .route("/api/ingest",          post(handle_ingest))
         .route("/api/chat",            post(handle_chat))
@@ -163,7 +190,22 @@ async fn async_main() {
     tracing::info!("Rust Server listening on {}", addr);
 
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    
+    // Graceful Shutdown handler
+    axum::serve(listener, app)
+        .with_graceful_shutdown(async move {
+            tokio::signal::ctrl_c()
+                .await
+                .expect("Failed to listen for ctrl_c signal");
+            tracing::info!("Shutdown signal received. Cancelling background workers...");
+            cancel_token.cancel();
+            
+            // Give workers a moment to finish current jobs if any
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+            tracing::info!("Graceful shutdown complete.");
+        })
+        .await
+        .unwrap();
 }
 
 async fn handle_ingest(
@@ -197,18 +239,47 @@ async fn handle_ingest(
         case_id
     );
 
+    d3_graph_bench::observability::emit_stage_event(
+        "handler",
+        "handler_started",
+        Some(&case_id),
+        serde_json::json!({"docs_count": documents.len()}),
+        serde_json::json!({"case_id": case_id}),
+    );
+
     let mut aggregated_text = String::new();
     for (file_name, file_bytes) in documents {
-        match extract_file_text(&state, &file_name, file_bytes).await {
-            Ok(t) => {
-                tracing::info!("Extracted {} chars from {}", t.len(), file_name);
-                aggregated_text.push_str(&format!("\n--- Document: {} ---\n{}\n", file_name, t));
+        match d3_graph_bench::ingestion::pipeline::ingest_document(&state, file_name.clone(), file_bytes).await {
+            Ok(doc) => {
+                let name = doc.file_name.clone().unwrap_or(file_name);
+                tracing::info!("Extracted {} chars from {}", doc.text_content.len(), name);
+                
+                // Phase 2: Call extraction service
+                if let Ok(facts) = d3_graph_bench::extraction::service::extract_case_facts(&state.ner_llm, &doc).await {
+                    tracing::info!("Extracted {} diagnoses and {} medications from {}", facts.diagnoses.len(), facts.medications.len(), name);
+                    
+                    // Phase 3: Call resolver agent
+                    let resolver = d3_graph_bench::resolver::agent::ResolverAgent::new(state.openai_client.clone());
+                    if let Ok(resolved) = d3_graph_bench::resolver::service::resolve_case_facts(&resolver, &facts).await {
+                        tracing::info!("Resolved {} diagnoses and {} medications from {}", resolved.diagnoses.len(), resolved.medications.len(), name);
+                    }
+                }
+
+                aggregated_text.push_str(&format!("\n--- Document: {} ---\n{}\n", name, doc.text_content));
             }
             Err(e) => {
-                tracing::warn!("Failed to extract text from {}: {}", file_name, e);
+                tracing::warn!("Failed to ingest document: {}", e);
             }
         }
     }
+
+    d3_graph_bench::observability::emit_stage_event(
+        "handler",
+        "aggregated_text_ready",
+        Some(&case_id),
+        serde_json::json!({"total_len": aggregated_text.len()}),
+        serde_json::json!({"case_id": case_id}),
+    );
 
     let text = aggregated_text;
 
@@ -245,7 +316,7 @@ async fn handle_ingest(
         state.main_llm.clone(),
         state.slm.clone(),
         state.ner_llm.clone(),
-        state.graph.clone(),
+        state.neo4j_client.clone(),
         state.pg_pool.clone(),
         case,
     )
@@ -257,6 +328,14 @@ async fn handle_ingest(
     {
         tracing::error!("Failed to save adjudication report: {}", e);
     }
+
+    d3_graph_bench::observability::emit_stage_event(
+        "handler",
+        "handler_complete",
+        Some(&case_id),
+        serde_json::json!({"status": "success"}),
+        serde_json::json!({"case_id": case_id}),
+    );
 
     Ok(final_report)
 }
@@ -297,7 +376,7 @@ async fn handle_chat(
         state.main_llm.clone(),
         state.slm.clone(),
         state.ner_llm.clone(),
-        state.graph.clone(),
+        state.neo4j_client.clone(),
         state.pg_pool.clone(),
         case,
         payload.query,
@@ -393,7 +472,7 @@ async fn handle_readjudicate(
         state.main_llm.clone(),
         state.slm.clone(),
         state.ner_llm.clone(),
-        state.graph.clone(),
+        state.neo4j_client.clone(),
         state.pg_pool.clone(),
         case,
     )
@@ -458,52 +537,6 @@ async fn handle_delete_message(
     }
 }
 
-async fn extract_file_text(
-    state: &Arc<AppState>,
-    file_name: &str,
-    file_bytes: Vec<u8>,
-) -> Result<String, String> {
-    let filename_lower = file_name.to_lowercase();
-    if filename_lower.ends_with(".json") {
-        tracing::info!("Parsing JSON natively...");
-        Ok(String::from_utf8(file_bytes).unwrap_or_else(|_| "Invalid JSON UTF-8".to_string()))
-    } else if filename_lower.ends_with(".pdf") {
-        tracing::info!("Extracting PDF text locally...");
-        match pdf_extract::extract_text_from_mem(&file_bytes) {
-            Ok(t) if t.trim().len() > 50 => {
-                tracing::info!("PDF text extracted natively.");
-                Ok(t)
-            }
-            _ => {
-                tracing::warn!(
-                    "PDF text empty or extraction failed. Falling back to OCR sidecar..."
-                );
-                match clients::ocr::extract_text_from_bytes(
-                    &state.config.ocr_service_url,
-                    file_bytes,
-                    file_name.to_string(),
-                )
-                .await
-                {
-                    Ok(t) => Ok(t),
-                    Err(e) => Err(format!("OCR Pipeline Error: {}", e)),
-                }
-            }
-        }
-    } else {
-        tracing::info!("Sending to OCR sidecar...");
-        match clients::ocr::extract_text_from_bytes(
-            &state.config.ocr_service_url,
-            file_bytes,
-            file_name.to_string(),
-        )
-        .await
-        {
-            Ok(t) => Ok(t),
-            Err(e) => Err(format!("OCR Pipeline Error: {}", e)),
-        }
-    }
-}
 
 #[derive(serde::Serialize)]
 struct BatchFileResult {
@@ -557,16 +590,37 @@ async fn handle_ingest_batch(
         case_id
     );
 
+    d3_graph_bench::observability::emit_stage_event(
+        "handler",
+        "handler_started",
+        Some(&case_id),
+        serde_json::json!({"docs_count": documents.len(), "batch": true}),
+        serde_json::json!({"case_id": case_id}),
+    );
+
     let mut aggregated_text = String::new();
     let mut results = Vec::new();
 
     for (file_name, file_bytes) in documents {
-        match extract_file_text(&state, &file_name, file_bytes).await {
-            Ok(t) => {
-                tracing::info!("Extracted {} chars from {}", t.len(), file_name);
-                aggregated_text.push_str(&format!("\n--- Document: {} ---\n{}\n", file_name, t));
+        match d3_graph_bench::ingestion::pipeline::ingest_document(&state, file_name.clone(), file_bytes).await {
+            Ok(doc) => {
+                let name = doc.file_name.clone().unwrap_or(file_name);
+                tracing::info!("Extracted {} chars from {}", doc.text_content.len(), name);
+
+                // Phase 2: Call extraction service
+                if let Ok(facts) = d3_graph_bench::extraction::service::extract_case_facts(&state.ner_llm, &doc).await {
+                    tracing::info!("Extracted {} diagnoses and {} medications from {}", facts.diagnoses.len(), facts.medications.len(), name);
+
+                    // Phase 3: Call resolver agent
+                    let resolver = d3_graph_bench::resolver::agent::ResolverAgent::new(state.openai_client.clone());
+                    if let Ok(resolved) = d3_graph_bench::resolver::service::resolve_case_facts(&resolver, &facts).await {
+                        tracing::info!("Resolved {} diagnoses and {} medications from {}", resolved.diagnoses.len(), resolved.medications.len(), name);
+                    }
+                }
+
+                aggregated_text.push_str(&format!("\n--- Document: {} ---\n{}\n", name, doc.text_content));
                 results.push(BatchFileResult {
-                    file_name,
+                    file_name: name,
                     status: "completed".to_string(),
                     report: None, // Will be populated after adjudication
                     error: None,
@@ -582,6 +636,14 @@ async fn handle_ingest_batch(
             }
         }
     }
+
+    d3_graph_bench::observability::emit_stage_event(
+        "handler",
+        "aggregated_text_ready",
+        Some(&case_id),
+        serde_json::json!({"total_len": aggregated_text.len(), "batch": true}),
+        serde_json::json!({"case_id": case_id}),
+    );
 
     if aggregated_text.trim().is_empty() {
         return Ok(Json(BatchResponse {
@@ -618,7 +680,7 @@ async fn handle_ingest_batch(
         state.main_llm.clone(),
         state.slm.clone(),
         state.ner_llm.clone(),
-        state.graph.clone(),
+        state.neo4j_client.clone(),
         state.pg_pool.clone(),
         case,
     )
@@ -638,8 +700,17 @@ async fn handle_ingest_batch(
         }
     }
 
+    d3_graph_bench::observability::emit_stage_event(
+        "handler",
+        "handler_complete",
+        Some(&case_id),
+        serde_json::json!({"status": "success", "batch": true}),
+        serde_json::json!({"case_id": case_id}),
+    );
+
     Ok(Json(BatchResponse {
         case_id,
         results,
     }))
 }
+
